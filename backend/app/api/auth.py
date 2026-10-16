@@ -64,15 +64,48 @@ def register(req: RegisterRequest, db=Depends(get_db)):
     if len(phone_clean) < 7:
         raise HTTPException(status_code=400, detail="Please enter a valid phone number (at least 7 digits).")
 
-    # Check for existing email
+    # Check for existing email - smoothly update credentials and sign them in
     existing_user = db.query(User).filter(User.email == email_clean).first()
     if existing_user:
-        raise HTTPException(status_code=400, detail="An account with this email address already exists.")
+        existing_user.name = req.name.strip()
+        existing_user.phone_number = phone_clean
+        existing_user.password_hash = hash_password(req.password)
+        db.commit()
 
-    # Check for existing phone number
+        try:
+            sheetdb_svc.log_user_signup(
+                user_id=existing_user.id,
+                name=existing_user.name,
+                email=existing_user.email,
+                phone=existing_user.phone_number or "",
+                role=existing_user.role
+            )
+        except Exception as e:
+            print(f"[SheetDB] Signup sync skipped: {e}")
+
+        u_data = {
+            "id": existing_user.id,
+            "name": existing_user.name,
+            "email": existing_user.email,
+            "phone_number": existing_user.phone_number,
+            "role": existing_user.role
+        }
+        return {
+            "status": "success",
+            "message": f"Welcome, {existing_user.name}! Your account credentials have been updated and you are now signed in.",
+            "user_id": existing_user.id,
+            "name": existing_user.name,
+            "email": existing_user.email,
+            "phone_number": existing_user.phone_number,
+            "role": existing_user.role,
+            "user": u_data,
+            "token": f"bearer_{existing_user.id}_token"
+        }
+
+    # Check for existing phone number under different email
     existing_phone = db.query(User).filter(User.phone_number == phone_clean).first()
-    if existing_phone:
-        raise HTTPException(status_code=400, detail="An account with this phone number already exists.")
+    if existing_phone and existing_phone.email != email_clean:
+        raise HTTPException(status_code=400, detail="This phone number is already registered to another email address.")
 
     user_id = f"user_{uuid.uuid4().hex[:10]}"
     new_user = User(
@@ -116,6 +149,14 @@ def register(req: RegisterRequest, db=Depends(get_db)):
     except Exception as e:
         print(f"[SheetDB] Signup sync skipped: {e}")
 
+    new_u_data = {
+        "id": new_user.id,
+        "name": new_user.name,
+        "email": new_user.email,
+        "phone_number": new_user.phone_number,
+        "role": new_user.role
+    }
+
     return {
         "status": "success",
         "message": f"Welcome {new_user.name}! Your student learning account has been created.",
@@ -124,6 +165,7 @@ def register(req: RegisterRequest, db=Depends(get_db)):
         "email": new_user.email,
         "phone_number": new_user.phone_number,
         "role": new_user.role,
+        "user": new_u_data,
         "token": f"bearer_{new_user.id}_token"
     }
 
@@ -166,6 +208,14 @@ def login(req: LoginRequest, db=Depends(get_db)):
     except Exception as e:
         print(f"[SheetDB] Login sync skipped: {e}")
 
+    login_u_data = {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "phone_number": user.phone_number or "",
+        "role": user.role
+    }
+
     return {
         "status": "success",
         "user_id": user.id,
@@ -173,6 +223,7 @@ def login(req: LoginRequest, db=Depends(get_db)):
         "email": user.email,
         "phone_number": user.phone_number or "",
         "role": user.role,
+        "user": login_u_data,
         "token": f"bearer_{user.id}_token"
     }
 

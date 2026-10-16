@@ -11,7 +11,18 @@ export async function fetchJson(endpoint: string, options: RequestInit = {}) {
   });
   if (!res.ok) {
     const errorText = await res.text();
-    throw new Error(`API Error [${res.status}]: ${errorText}`);
+    let message = errorText;
+    try {
+      const parsed = JSON.parse(errorText);
+      if (parsed.detail) {
+        message = typeof parsed.detail === "string" ? parsed.detail : JSON.stringify(parsed.detail);
+      } else if (parsed.message) {
+        message = parsed.message;
+      }
+    } catch {
+      // Keep plain text message
+    }
+    throw new Error(message || `Request failed with status ${res.status}`);
   }
   return res.json();
 }

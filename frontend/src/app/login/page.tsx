@@ -83,18 +83,26 @@ export default function LoginPage() {
         role,
       });
 
-      setSuccessMessage(`Account created successfully! Welcome, ${res.user.name}. Redirecting...`);
-      localStorage.setItem("brackyou_user", res.user.id);
-      localStorage.setItem("brackyou_user_profile", JSON.stringify(res.user));
+      const userObj = res.user || {
+        id: res.user_id,
+        name: res.name,
+        email: res.email,
+        phone_number: res.phone_number,
+        role: res.role,
+      };
+
+      setSuccessMessage(res.message || `Account verified! Welcome, ${userObj.name}. Redirecting...`);
+      localStorage.setItem("brackyou_user", userObj.id);
+      localStorage.setItem("brackyou_user_profile", JSON.stringify(userObj));
       window.dispatchEvent(new Event("userChanged"));
 
       setTimeout(() => {
-        if (res.user.role === "trainer") {
+        if (userObj.role === "trainer") {
           router.push("/trainer");
         } else {
           router.push("/student/dashboard");
         }
-      }, 1200);
+      }, 1000);
     } catch (err: any) {
       setErrorMessage(err.message || "Registration failed. Please check inputs and retry.");
     } finally {
@@ -120,18 +128,26 @@ export default function LoginPage() {
         password: password || undefined,
       });
 
-      setSuccessMessage(`Welcome back, ${res.user.name}! Redirecting to portal...`);
-      localStorage.setItem("brackyou_user", res.user.id);
-      localStorage.setItem("brackyou_user_profile", JSON.stringify(res.user));
+      const userObj = res.user || {
+        id: res.user_id,
+        name: res.name,
+        email: res.email,
+        phone_number: res.phone_number,
+        role: res.role,
+      };
+
+      setSuccessMessage(`Welcome back, ${userObj.name}! Redirecting to portal...`);
+      localStorage.setItem("brackyou_user", userObj.id);
+      localStorage.setItem("brackyou_user_profile", JSON.stringify(userObj));
       window.dispatchEvent(new Event("userChanged"));
 
       setTimeout(() => {
-        if (res.user.role === "trainer") {
+        if (userObj.role === "trainer") {
           router.push("/trainer");
         } else {
           router.push("/student/dashboard");
         }
-      }, 900);
+      }, 800);
     } catch (err: any) {
       setErrorMessage(err.message || "Invalid credentials. Please verify and try again.");
     } finally {
@@ -357,9 +373,23 @@ export default function LoginPage() {
 
               {/* Status Alerts */}
               {errorMessage && (
-                <div className="mb-5 p-3.5 rounded-xl bg-accentRed/10 border-[2px] border-accentRed/40 flex items-center gap-2.5 text-accentRed text-xs font-medium">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{errorMessage}</span>
+                <div className="mb-5 p-3.5 rounded-xl bg-accentRed/10 border-[2px] border-accentRed/40 text-accentRed text-xs font-medium space-y-2">
+                  <div className="flex items-center gap-2.5">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{errorMessage}</span>
+                  </div>
+                  {errorMessage.toLowerCase().includes("already exists") && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTab("login");
+                        setErrorMessage(null);
+                      }}
+                      className="mt-1 px-3 py-1.5 bg-accentBrown text-white rounded-lg text-xs font-heading font-extrabold hover:bg-[#3b2315] transition-all flex items-center gap-1.5 shadow-sm"
+                    >
+                      <span>👉 Switch to Sign In & Enter Password</span>
+                    </button>
+                  )}
                 </div>
               )}
               {successMessage && (
