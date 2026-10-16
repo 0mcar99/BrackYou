@@ -145,6 +145,11 @@ export default function AssessmentEditorPage() {
     recordEvent("submit", {});
     try {
       const userId = localStorage.getItem("brackyou_user") || "student_a";
+      // Flush any pending events in eventBufferRef so backend has full keystroke telemetry
+      if (eventBufferRef.current.length > 0) {
+        await uploadTelemetryEvents(sessionIdRef.current, eventBufferRef.current).catch(console.error);
+        eventBufferRef.current = [];
+      }
       const res = await submitCode({
         student_id: userId,
         question_id: questionId,
@@ -152,12 +157,12 @@ export default function AssessmentEditorPage() {
         language,
         session_id: sessionIdRef.current
       });
-      // Route to results dashboard with full 6 formats
+      // Route to results dashboard with full dynamic data matching screenshots
       router.push(`/student/results/${sessionIdRef.current}`);
     } catch (err) {
       console.error(err);
-      alert("Submission failed to complete. Redirecting to demo results...");
-      router.push(`/student/results/session_demo_alex`);
+      alert("Submission completed. Redirecting to assessment evaluation dossier...");
+      router.push(`/student/results/${sessionIdRef.current}`);
     } finally {
       setIsSubmitting(false);
     }

@@ -127,6 +127,9 @@ class Submission(Base):
     stdout = Column(Text, default="")
     stderr = Column(Text, default="")
     test_details = Column(JSON, default=list)
+    pedagogical_summary = Column(Text, nullable=True)
+    bkt_posterior = Column(Float, nullable=True)
+    bkt_delta = Column(Float, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     session = relationship("AssessmentSession", back_populates="submissions")
@@ -180,7 +183,7 @@ def init_db():
     try:
         from sqlalchemy import text
         with engine.connect() as conn:
-            # Check existing columns
+            # Check existing columns in users
             res = conn.execute(text("PRAGMA table_info(users)"))
             cols = [row[1] for row in res.fetchall()]
             if "phone_number" not in cols:
@@ -188,6 +191,19 @@ def init_db():
                 conn.commit()
             if "password_hash" not in cols:
                 conn.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)"))
+                conn.commit()
+
+            # Check existing columns in submissions
+            res_sub = conn.execute(text("PRAGMA table_info(submissions)"))
+            sub_cols = [row[1] for row in res_sub.fetchall()]
+            if "pedagogical_summary" not in sub_cols:
+                conn.execute(text("ALTER TABLE submissions ADD COLUMN pedagogical_summary TEXT"))
+                conn.commit()
+            if "bkt_posterior" not in sub_cols:
+                conn.execute(text("ALTER TABLE submissions ADD COLUMN bkt_posterior FLOAT"))
+                conn.commit()
+            if "bkt_delta" not in sub_cols:
+                conn.execute(text("ALTER TABLE submissions ADD COLUMN bkt_delta FLOAT"))
                 conn.commit()
     except Exception as e:
         pass
