@@ -1,0 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Nunito:wght@700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-cream: #FDF6E8;
+  --bg-card: #FFFDF7;
+  --text-primary: #2D1B0E;
+  --text-secondary: #6B4F3A;
+  --accent-orange: #E8622B;
+  --accent-teal: #2A7A6B;
+  --accent-brown: #4A2C1A;
+}
+
+body {
+  background-color: var(--bg-cream);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, .font-heading {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+}
+
+code, pre, .font-mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Tiebreak Chunky Card */
+.tiebreak-card {
+  background-color: #FFFDF7;
+  border: 2.5px solid #4A2C1A;
+  border-radius: 16px;
+  box-shadow: 0 4px 0 #4A2C1A;
+  transition: all 0.15s ease-in-out;
+}
+
+.tiebreak-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #4A2C1A;
+}
+
+/* Tiebreak Button */
+.tiebreak-btn {
+  border: 2.5px solid #4A2C1A;
+  border-radius: 50px;
+  box-shadow: 0 4px 0 #4A2C1A;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  transition: all 0.1s ease;
+}
+
+.tiebreak-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #4A2C1A;
+}
