@@ -99,3 +99,15 @@ export const evaluateViva = (submissionId: string, questionText: string, student
 export const getCohortHeatmap = () => fetchJson("/trainer/cohort-heatmap");
 export const getIntegrityReviews = () => fetchJson("/trainer/reviews");
 export const getAtRiskStudents = () => fetchJson("/trainer/at-risk");
+
+// SheetDB
+export const getSheetDBStatus = () => fetchJson("/sheetdb/status");
+export const saveSheetDBConfig = (apiUrl: string) =>
+  fetchJson("/sheetdb/config", {
+    method: "POST",
+    body: JSON.stringify({ api_url: apiUrl }),
+  });
+export const syncSheetDB = () =>
+  fetchJson("/sheetdb/sync", {
+    method: "POST",
+  });

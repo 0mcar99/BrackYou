@@ -8,27 +8,78 @@ import {
 } from "lucide-react";
 import { RibbonCard } from "@/components/ui/RibbonCard";
 import { PillButton } from "@/components/ui/PillButton";
-import { getCohortHeatmap, getIntegrityReviews, updateSignalDisposition } from "@/lib/api";
+import {
+  getCohortHeatmap, getIntegrityReviews, updateSignalDisposition,
+  getSheetDBStatus, saveSheetDBConfig, syncSheetDB
+} from "@/lib/api";
+import { Database, Link2, ExternalLink, Send } from "lucide-react";
 
 export default function TrainerDashboardPage() {
   const [heatmapData, setHeatmapData] = useState<any>(null);
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"heatmap" | "reviews">("heatmap");
+  
+  // SheetDB states
+  const [sheetDbStatus, setSheetDbStatus] = useState<any>(null);
+  const [sheetDbInput, setSheetDbInput] = useState("");
+  const [syncingSheet, setSyncingSheet] = useState(false);
+  const [sheetBanner, setSheetBanner] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [hm, rev] = await Promise.all([
+      const [hm, rev, sdb] = await Promise.all([
         getCohortHeatmap(),
-        getIntegrityReviews()
+        getIntegrityReviews(),
+        getSheetDBStatus().catch(() => null)
       ]);
       setHeatmapData(hm);
       setReviews(rev);
+      if (sdb) {
+        setSheetDbStatus(sdb);
+        if (sdb.raw_url) setSheetDbInput(sdb.raw_url);
+      }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveSheetDb = async () => {
+    if (!sheetDbInput.trim()) return;
+    try {
+      await saveSheetDBConfig(sheetDbInput.trim());
+      const updated = await getSheetDBStatus();
+      setSheetDbStatus(updated);
+      setSheetBanner({ type: "success", text: "SheetDB API URL saved successfully!" });
+      setTimeout(() => setSheetBanner(null), 4000);
+    } catch (e: any) {
+      setSheetBanner({ type: "error", text: e.message || "Failed to save SheetDB URL" });
+    }
+  };
+
+  const handleSyncSheetDb = async () => {
+    setSyncingSheet(true);
+    setSheetBanner(null);
+    try {
+      const res = await syncSheetDB();
+      if (res.status === "success" || res.sheetdb_result?.success) {
+        setSheetBanner({
+          type: "success",
+          text: `Successfully synced ${res.synced_records} student records & assessment activities to Google Sheets!`
+        });
+      } else {
+        setSheetBanner({
+          type: "error",
+          text: res.message || res.sheetdb_result?.error || "SheetDB sync failed. Verify your URL and sheet permissions."
+        });
+      }
+    } catch (e: any) {
+      setSheetBanner({ type: "error", text: e.message || "Sync error" });
+    } finally {
+      setSyncingSheet(false);
     }
   };
 
@@ -99,17 +150,97 @@ export default function TrainerDashboardPage() {
 
       {activeTab === "heatmap" ? (
         <div className="space-y-6">
-          {/* CLASS MASTERY HEATMAP (From the user specification prompt!) */}
+          {/* SHEETDB GOOGLE SHEETS LIVE SYNC HUB */}
+          <div className="tiebreak-card p-5 bg-card border-l-[6px] border-l-emerald-600 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-800">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-heading font-extrabold text-textPrimary">
+                      SheetDB Google Sheets Live Sync
+                    </h2>
+                    {sheetDbStatus?.configured ? (
+                      <span className="px-2 py-0.5 rounded-pill bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase border border-emerald-300">
+                        🟢 Connected
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-pill bg-amber-100 text-amber-800 text-[10px] font-extrabold uppercase border border-amber-300">
+                        🟡 Connect SheetDB URL
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs font-semibold text-textSecondary">
+                    Automatically records user registrations, logins, BKT masteries, and assessment activity directly into your Google Sheet via SheetDB API.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSyncSheetDb}
+                  disabled={syncingSheet}
+                  className="tiebreak-btn inline-flex items-center gap-2 px-4 py-2 text-xs font-heading font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white rounded-pill shadow-sm transition-all"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${syncingSheet ? "animate-spin" : ""}`} />
+                  {syncingSheet ? "Syncing..." : "Sync All Data to SheetDB"}
+                </button>
+              </div>
+            </div>
+
+            {/* URL Input Form */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-borderLight/60">
+              <span className="text-xs font-heading font-bold text-textSecondary">
+                SheetDB API URL:
+              </span>
+              <input
+                type="text"
+                value={sheetDbInput}
+                onChange={(e) => setSheetDbInput(e.target.value)}
+                placeholder="https://sheetdb.io/api/v1/your_api_id"
+                className="flex-1 min-w-[280px] text-xs px-3 py-1.5 rounded-lg border border-borderLight bg-cream/30 focus:outline-none focus:ring-1 focus:ring-emerald-600 font-mono"
+              />
+              <button
+                onClick={handleSaveSheetDb}
+                className="px-3 py-1.5 text-xs font-heading font-extrabold bg-accentBrown text-white hover:bg-[#3b2315] rounded-lg transition-all"
+              >
+                Save URL
+              </button>
+            </div>
+
+            {sheetBanner && (
+              <div
+                className={`text-xs px-3 py-2 rounded-lg font-bold flex items-center justify-between ${
+                  sheetBanner.type === "success"
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : "bg-rose-50 text-rose-800 border border-rose-200"
+                }`}
+              >
+                <span>{sheetBanner.text}</span>
+                <button onClick={() => setSheetBanner(null)} className="text-[11px] underline ml-2">
+                  Dismiss
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* CLASS MASTERY HEATMAP & PERSONA QUALIFICATION MATRIX */}
           <div className="tiebreak-card p-6 bg-card space-y-4">
             <div className="flex flex-wrap justify-between items-center gap-2">
-              <span className="text-xs font-heading font-extrabold uppercase tracking-widest text-textSecondary">
-                Class Mastery Matrix (BKT Heatmap)
-              </span>
+              <div>
+                <span className="text-xs font-heading font-extrabold uppercase tracking-widest text-textSecondary block">
+                  Cohort Mastery & Persona Qualification Matrix
+                </span>
+                <p className="text-[11px] font-semibold text-textSecondary">
+                  Real-time evidentiary qualification according to each student's behavioral persona & BKT mastery.
+                </p>
+              </div>
               <div className="flex items-center gap-3 text-xs font-bold text-textSecondary">
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> 🟢 Solid (80%+)</span>
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> 🟡 Weak (40-79%)</span>
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> 🔴 Critical (&lt;40%)</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-slate-300" /> 🔒 Locked</span>
               </div>
             </div>
 
@@ -118,25 +249,35 @@ export default function TrainerDashboardPage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b-[2px] border-borderLight text-xs font-heading font-extrabold text-textSecondary">
-                    <th className="py-3 px-4">Student</th>
+                    <th className="py-3 px-4">Student & Contact</th>
+                    <th className="py-3 px-3">Persona & Qualification</th>
                     {heatmapData?.concepts?.map((c: any) => (
-                      <th key={c.id} className="py-3 px-3 text-center">{c.title}</th>
+                      <th key={c.id} className="py-3 px-2 text-center">{c.title}</th>
                     ))}
                     <th className="py-3 px-4 text-center">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-borderLight text-xs font-bold text-textPrimary">
                   {heatmapData?.students?.map((s: any) => {
-                    const isAlex = s.student_id === "student_a";
-                    const isJonah = s.student_id === "student_b";
+                    const persona = s.persona || {};
 
                     return (
                       <tr key={s.student_id} className="hover:bg-cream/40 transition-colors">
-                        <td className="py-3 px-4 font-heading font-extrabold">
-                          <div className="flex items-center gap-2">
-                            <span>{s.student_name}</span>
-                            {isAlex && <span className="text-[10px] px-1.5 py-0.5 rounded bg-accentTeal/10 text-accentTeal font-bold">Advanced</span>}
-                            {isJonah && <span className="text-[10px] px-1.5 py-0.5 rounded bg-accentRed/10 text-accentRed font-bold">Needs Help</span>}
+                        <td className="py-3 px-4">
+                          <div className="font-heading font-extrabold text-textPrimary text-sm">
+                            {s.student_name}
+                          </div>
+                          <div className="text-[11px] text-textSecondary font-semibold">
+                            {s.email} {s.phone_number ? `· ${s.phone_number}` : ""}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3">
+                          <span className={`inline-block px-2.5 py-1 rounded-pill text-[10px] font-heading font-extrabold border ${persona.badge_color || "border-borderLight bg-cream text-textSecondary"}`}>
+                            {persona.persona_title || "Active Learner"}
+                          </span>
+                          <div className="text-[11px] font-semibold text-textSecondary mt-1">
+                            {persona.qualification_verdict || "Evaluating"}
                           </div>
                         </td>
 
@@ -149,7 +290,7 @@ export default function TrainerDashboardPage() {
                           }[state?.status as "solid" | "weak" | "critical"] || "bg-slate-300 text-slate-500";
 
                           return (
-                            <td key={c.id} className="py-3 px-3 text-center">
+                            <td key={c.id} className="py-3 px-2 text-center">
                               <span className={`inline-flex items-center justify-center w-8 h-8 rounded-xl font-heading font-extrabold text-[11px] shadow-sm ${dotColor}`}>
                                 {state?.percentage ?? 10}%
                               </span>
@@ -158,15 +299,17 @@ export default function TrainerDashboardPage() {
                         })}
 
                         <td className="py-3 px-4 text-center">
-                          {isJonah ? (
-                            <span className="px-2.5 py-1 rounded-pill bg-rose-100 text-rose-800 text-[10px] font-heading font-extrabold border border-rose-300">
-                              Remedial Loop
-                            </span>
-                          ) : (
-                            <span className="px-2.5 py-1 rounded-pill bg-emerald-100 text-emerald-800 text-[10px] font-heading font-extrabold border border-emerald-300">
-                              On Track
-                            </span>
-                          )}
+                          <span className={`px-2.5 py-1 rounded-pill text-[10px] font-heading font-extrabold border ${
+                            persona.tag === "Advanced Master"
+                              ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                              : persona.tag === "Remedial Loop"
+                              ? "bg-rose-100 text-rose-800 border-rose-300"
+                              : persona.tag === "Verification Hold"
+                              ? "bg-amber-100 text-amber-800 border-amber-300"
+                              : "bg-cream text-textSecondary border-borderLight"
+                          }`}>
+                            {persona.tag || "On Track"}
+                          </span>
                         </td>
                       </tr>
                     );

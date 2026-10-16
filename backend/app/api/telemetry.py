@@ -6,6 +6,7 @@ from backend.app.models.entities import (
     Submission, VivaRecord, Question, StudentMastery, Concept
 )
 from backend.app.services.telemetry_analyzer import TelemetryAnalyzer
+from backend.app.services.persona_engine import StudentPersonaEngine
 
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 
@@ -249,6 +250,15 @@ if __name__ == '__main__':
             "delta_pct": current_bkt_pct - 64,
             "summary": f"You are in the top 20% of your batch on {concept_title}. Prerequisite gates for Spring Boot are 80% cleared."
         },
+        "persona": StudentPersonaEngine.classify_persona(
+            mastery_pct=current_bkt_pct,
+            viva_match_pct=viva_payload.get("match_score", 85),
+            passed_ratio=(passed_count / max(total_count, 1)),
+            paste_count=len([s for s in sig_dicts if s["signal_type"] == "large_paste"]),
+            max_paste_chars=max([s.get("char_count", 0) for s in sig_dicts] or [0]),
+            run_count=len([e for e in ev_dicts if e["type"] == "run"]),
+            critical_prereqs_count=0
+        ),
         "viva": viva_payload
     }
 

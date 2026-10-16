@@ -7,8 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from backend.app.models.entities import SessionLocal, User, Concept, StudentMastery
+from backend.app.services.sheetdb_service import SheetDBService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+sheetdb_svc = SheetDBService()
 
 def get_db():
     db = SessionLocal()
@@ -102,6 +104,18 @@ def register(req: RegisterRequest, db=Depends(get_db)):
         db.add_all(initial_masteries)
         db.commit()
 
+    # Async log to SheetDB if configured
+    try:
+        sheetdb_svc.log_user_signup(
+            user_id=new_user.id,
+            name=new_user.name,
+            email=new_user.email,
+            phone=new_user.phone_number or "",
+            role=new_user.role
+        )
+    except Exception as e:
+        print(f"[SheetDB] Signup sync skipped: {e}")
+
     return {
         "status": "success",
         "message": f"Welcome {new_user.name}! Your student learning account has been created.",
@@ -140,6 +154,17 @@ def login(req: LoginRequest, db=Depends(get_db)):
     else:
         # Fallback for seeded demo accounts if accessed without password
         pass
+
+    # Async log to SheetDB if configured
+    try:
+        sheetdb_svc.log_user_signin(
+            user_id=user.id,
+            name=user.name,
+            email=user.email,
+            phone=user.phone_number or ""
+        )
+    except Exception as e:
+        print(f"[SheetDB] Login sync skipped: {e}")
 
     return {
         "status": "success",

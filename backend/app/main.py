@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.app.models.entities import init_db
 from backend.app.seed.seed_data import populate_seed_data
 from backend.app.api import (
-    auth, curriculum, adaptive, assessment, telemetry, viva, trainer
+    auth, curriculum, adaptive, assessment, telemetry, viva, trainer, sheetdb_api
 )
 
 app = FastAPI(
@@ -29,6 +29,7 @@ app.include_router(assessment.router, prefix="/api")
 app.include_router(telemetry.router, prefix="/api")
 app.include_router(viva.router, prefix="/api")
 app.include_router(trainer.router, prefix="/api")
+app.include_router(sheetdb_api.router, prefix="/api")
 
 @app.on_event("startup")
 def on_startup():

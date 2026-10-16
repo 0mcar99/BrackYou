@@ -240,6 +240,36 @@ export default function ResultsDashboardPage() {
         </div>
       </RibbonCard>
 
+      {/* Evidentiary Qualification & Persona Banner */}
+      {replayData?.persona && (
+        <div className="tiebreak-card p-5 bg-card border-l-[6px] border-l-accentTeal flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-heading font-extrabold uppercase tracking-widest text-textSecondary">
+                Evidentiary Qualification:
+              </span>
+              <span className={`px-2.5 py-0.5 rounded-pill text-xs font-heading font-extrabold border ${replayData.persona.badge_color || "bg-cream border-borderLight"}`}>
+                {replayData.persona.persona_title}
+              </span>
+            </div>
+            <h3 className="text-base font-heading font-extrabold text-textPrimary">
+              Verdict: {replayData.persona.qualification_verdict} ({replayData.persona.qualification_level})
+            </h3>
+            <p className="text-xs font-semibold text-textSecondary max-w-2xl">
+              {replayData.persona.qualification_summary}
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="text-[10px] font-heading font-extrabold uppercase tracking-wider text-textSecondary block">
+              Prerequisite Recommendation
+            </span>
+            <span className="text-xs font-heading font-extrabold text-accentBrown">
+              {replayData.persona.recommended_action}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* SCREENSHOT 4: BOTTOM ROW — FORMAT 3: TEST CASES & FORMAT 5: COHORT CONTEXT */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Format 3: Test Cases (Actual Execution) */}

@@ -3,6 +3,7 @@ from backend.app.models.entities import (
     SessionLocal, User, Concept, StudentMastery, AssessmentSession,
     IntegritySignal, Submission
 )
+from backend.app.services.persona_engine import StudentPersonaEngine
 
 router = APIRouter(prefix="/trainer", tags=["trainer"])
 
@@ -27,9 +28,32 @@ def get_cohort_heatmap(db=Depends(get_db)):
 
     matrix = []
     for s in students:
+        s_scores = [mastery_lookup.get((s.id, c.id), 0.10) for c in concepts]
+        s_avg = int((sum(s_scores) / max(len(s_scores), 1)) * 100)
+        critical_count = sum(1 for sc in s_scores if sc < 0.40)
+
+        # Check integrity signals
+        has_flag = db.query(IntegritySignal).join(
+            AssessmentSession, IntegritySignal.session_id == AssessmentSession.id
+        ).filter(AssessmentSession.student_id == s.id).count() > 0
+
+        persona_info = StudentPersonaEngine.classify_persona(
+            mastery_pct=s_avg,
+            viva_match_pct=95 if s_avg >= 75 else 70,
+            passed_ratio=1.0 if s_avg >= 70 else 0.5,
+            paste_count=1 if has_flag else 0,
+            max_paste_chars=340 if has_flag else 0,
+            run_count=3,
+            critical_prereqs_count=critical_count
+        )
+
         row = {
             "student_id": s.id,
             "student_name": s.name,
+            "email": s.email,
+            "phone_number": s.phone_number or "",
+            "average_mastery": s_avg,
+            "persona": persona_info,
             "concepts": {}
         }
         for c in concepts:

@@ -9,8 +9,11 @@ from backend.app.models.entities import (
 )
 from backend.app.services.sandbox import HardenedSandbox
 from backend.app.services.bkt_engine import BKTEngine
+from backend.app.services.sheetdb_service import SheetDBService
+from backend.app.services.persona_engine import StudentPersonaEngine
 
 router = APIRouter(prefix="/assessment", tags=["assessment"])
+sheetdb_svc = SheetDBService()
 
 def get_db():
     db = SessionLocal()
@@ -329,6 +332,38 @@ def submit_code(req: SubmitRequest, db=Depends(get_db)):
 
     explanation = bkt.explain_change(prior_p, next_p, is_fully_correct, concept_title)
 
+    # Classify student persona and qualification
+    student_user = db.query(User).filter(User.id == req.student_id).first()
+    persona_info = StudentPersonaEngine.classify_persona(
+        mastery_pct=int(next_p * 100),
+        viva_match_pct=viva_record.match_score,
+        passed_ratio=(exec_result["passed_count"] / max(exec_result["total_count"], 1)),
+        paste_count=len([s for s in detected_signals if s.get("signal_type") == "large_paste"]),
+        max_paste_chars=max([s.get("char_count", 0) for s in detected_signals] or [0]),
+        run_count=len([e for e in ev_dicts if e.get("event_type") == "run"]),
+        critical_prereqs_count=0
+    )
+
+    # Sync to SheetDB if configured
+    try:
+        sheetdb_svc.log_assessment_activity(
+            user_id=req.student_id,
+            name=student_user.name if student_user else req.student_id,
+            email=student_user.email if student_user else "",
+            phone=student_user.phone_number if student_user else "",
+            question_id=req.question_id,
+            passed_tests=exec_result["passed_count"],
+            total_tests=exec_result["total_count"],
+            bkt_mastery_pct=int(next_p * 100),
+            persona=persona_info["persona_title"],
+            qualification=persona_info["qualification_verdict"],
+            viva_score=viva_record.match_score,
+            flagged_signals=len(detected_signals),
+            pedagogical_summary=pedagogical_summary
+        )
+    except Exception as e:
+        print(f"[SheetDB] Assessment sync skipped: {e}")
+
     return {
         "submission_id": submission.id,
         "session_id": session.id,
@@ -340,6 +375,7 @@ def submit_code(req: SubmitRequest, db=Depends(get_db)):
         "stderr": exec_result.get("stderr", ""),
         "test_details": exec_result.get("test_details", []),
         "pedagogical_summary": pedagogical_summary,
+        "persona": persona_info,
         "mastery_update": {
             "concept_id": concept_id,
             "concept_title": concept_title,
