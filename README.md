@@ -3,6 +3,41 @@
 
 ---
 
+## 🚀 Quick Access & Local URLs
+
+When running locally, access the interactive portal through your browser at:
+
+| Page / Portal | Local Browser URL | Description |
+| :--- | :--- | :--- |
+| **Student Sign-in & Register** | [http://localhost:3000/login](http://localhost:3000/login) | Full login portal collecting Name, Phone, Email, and Password. |
+| **Student Dashboard** | [http://localhost:3000/student/dashboard](http://localhost:3000/student/dashboard) | BKT knowledge graph, active learning path, mastery breakdown. |
+| **Live Coding Assessment** | [http://localhost:3000/student/assess/q_di_1](http://localhost:3000/student/assess/q_di_1) | Monaco editor, sandbox execution, real-time Socratic hints & telemetry. |
+| **Results & Forensic Replay** | [http://localhost:3000/student/results/sess_test_c24d587b](http://localhost:3000/student/results/sess_test_c24d587b) | Dynamic AST viva defense, execution console, timeline scrubber & BKT score. |
+| **Trainer Integrity Console** | [http://localhost:3000/trainer](http://localhost:3000/trainer) | Cohort mastery heatmap, flagged paste alerts & human review workflows. |
+| **Backend API Swagger Docs** | [http://localhost:8000/docs](http://localhost:8000/docs) | Interactive FastAPI OpenAPI documentation. |
+
+> **Note on GitHub Pages (`github.io`):** GitHub Pages only serves static Markdown/documentation (like this README). To run the interactive platform with its live Python sandbox runner, SQLite database, and Next.js frontend, use the local URLs above or follow the [Cloud Deployment Guide](#-cloud-deployment-guide) below.
+
+---
+
+## 🌐 Cloud Deployment Guide (Free Public Hosting)
+
+### 1. Deploy Backend (Python FastAPI) to Render (Free)
+1. Go to [render.com](https://render.com) and sign in with GitHub.
+2. Click **New +** → **Blueprint** and select your repository: `0mcar99/BrackYou`.
+3. Render automatically detects [`render.yaml`](./render.yaml) and deploys `brackyou-backend`.
+4. Copy your backend service URL (e.g. `https://brackyou-backend.onrender.com`).
+
+### 2. Deploy Frontend (Next.js) to Vercel (Free)
+1. Go to [vercel.com](https://vercel.com) and sign in with GitHub.
+2. Click **Add New...** → **Project** and import `0mcar99/BrackYou`.
+3. Set **Root Directory** to `frontend`.
+4. In **Environment Variables**, add:
+   - `NEXT_PUBLIC_API_URL` = `https://<your-render-backend-url>/api`
+5. Click **Deploy**. Your frontend is live with automatic SSL!
+
+---
+
 ## ⚡ Core Pillars & Innovations
 
 1. **Adaptive Bayesian Knowledge Tracing (BKT) over a Prerequisite DAG:**
