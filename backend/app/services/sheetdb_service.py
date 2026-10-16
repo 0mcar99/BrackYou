@@ -21,13 +21,32 @@ class SheetDBService:
         self._cached_url: Optional[str] = None
 
     def get_api_url(self) -> str:
-        """Retrieves SheetDB API URL from environment or persistent config"""
+        """Retrieves SheetDB API URL from environment, .env file, or persistent config"""
         if self._cached_url:
             return self._cached_url
         env_url = os.getenv("SHEETDB_API_URL", "").strip()
         if env_url:
             self._cached_url = env_url
             return env_url
+
+        # Check backend/.env and root .env
+        for env_path in [
+            os.path.join(os.path.dirname(__file__), "..", "..", ".env"),
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env")
+        ]:
+            if os.path.exists(env_path):
+                try:
+                    with open(env_path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            clean_line = line.strip()
+                            if clean_line.startswith("SHEETDB_API_URL="):
+                                val = clean_line.split("=", 1)[1].strip().strip('"').strip("'")
+                                if val:
+                                    self._cached_url = val
+                                    return val
+                except Exception:
+                    pass
+
         if os.path.exists(SHEETDB_CONFIG_FILE):
             try:
                 with open(SHEETDB_CONFIG_FILE, "r", encoding="utf-8") as f:

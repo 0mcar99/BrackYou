@@ -1,0 +1,4 @@
+{
+  "api_url": "",
+  "note": "Paste your SheetDB API URL here (e.g. https://sheetdb.io/api/v1/YOUR_API_ID) to automatically collect all student signups, logins, and live assessment telemetry into Google Sheets."
+}

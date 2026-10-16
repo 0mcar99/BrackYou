@@ -8,78 +8,27 @@ import {
 } from "lucide-react";
 import { RibbonCard } from "@/components/ui/RibbonCard";
 import { PillButton } from "@/components/ui/PillButton";
-import {
-  getCohortHeatmap, getIntegrityReviews, updateSignalDisposition,
-  getSheetDBStatus, saveSheetDBConfig, syncSheetDB
-} from "@/lib/api";
-import { Database, Link2, ExternalLink, Send } from "lucide-react";
+import { getCohortHeatmap, getIntegrityReviews, updateSignalDisposition } from "@/lib/api";
 
 export default function TrainerDashboardPage() {
   const [heatmapData, setHeatmapData] = useState<any>(null);
   const [reviews, setReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"heatmap" | "reviews">("heatmap");
-  
-  // SheetDB states
-  const [sheetDbStatus, setSheetDbStatus] = useState<any>(null);
-  const [sheetDbInput, setSheetDbInput] = useState("");
-  const [syncingSheet, setSyncingSheet] = useState(false);
-  const [sheetBanner, setSheetBanner] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [hm, rev, sdb] = await Promise.all([
+      const [hm, rev] = await Promise.all([
         getCohortHeatmap(),
-        getIntegrityReviews(),
-        getSheetDBStatus().catch(() => null)
+        getIntegrityReviews()
       ]);
       setHeatmapData(hm);
       setReviews(rev);
-      if (sdb) {
-        setSheetDbStatus(sdb);
-        if (sdb.raw_url) setSheetDbInput(sdb.raw_url);
-      }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSaveSheetDb = async () => {
-    if (!sheetDbInput.trim()) return;
-    try {
-      await saveSheetDBConfig(sheetDbInput.trim());
-      const updated = await getSheetDBStatus();
-      setSheetDbStatus(updated);
-      setSheetBanner({ type: "success", text: "SheetDB API URL saved successfully!" });
-      setTimeout(() => setSheetBanner(null), 4000);
-    } catch (e: any) {
-      setSheetBanner({ type: "error", text: e.message || "Failed to save SheetDB URL" });
-    }
-  };
-
-  const handleSyncSheetDb = async () => {
-    setSyncingSheet(true);
-    setSheetBanner(null);
-    try {
-      const res = await syncSheetDB();
-      if (res.status === "success" || res.sheetdb_result?.success) {
-        setSheetBanner({
-          type: "success",
-          text: `Successfully synced ${res.synced_records} student records & assessment activities to Google Sheets!`
-        });
-      } else {
-        setSheetBanner({
-          type: "error",
-          text: res.message || res.sheetdb_result?.error || "SheetDB sync failed. Verify your URL and sheet permissions."
-        });
-      }
-    } catch (e: any) {
-      setSheetBanner({ type: "error", text: e.message || "Sync error" });
-    } finally {
-      setSyncingSheet(false);
     }
   };
 
@@ -150,82 +99,6 @@ export default function TrainerDashboardPage() {
 
       {activeTab === "heatmap" ? (
         <div className="space-y-6">
-          {/* SHEETDB GOOGLE SHEETS LIVE SYNC HUB */}
-          <div className="tiebreak-card p-5 bg-card border-l-[6px] border-l-emerald-600 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-800">
-                  <Database className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-heading font-extrabold text-textPrimary">
-                      SheetDB Google Sheets Live Sync
-                    </h2>
-                    {sheetDbStatus?.configured ? (
-                      <span className="px-2 py-0.5 rounded-pill bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase border border-emerald-300">
-                        🟢 Connected
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-pill bg-amber-100 text-amber-800 text-[10px] font-extrabold uppercase border border-amber-300">
-                        🟡 Connect SheetDB URL
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs font-semibold text-textSecondary">
-                    Automatically records user registrations, logins, BKT masteries, and assessment activity directly into your Google Sheet via SheetDB API.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleSyncSheetDb}
-                  disabled={syncingSheet}
-                  className="tiebreak-btn inline-flex items-center gap-2 px-4 py-2 text-xs font-heading font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white rounded-pill shadow-sm transition-all"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${syncingSheet ? "animate-spin" : ""}`} />
-                  {syncingSheet ? "Syncing..." : "Sync All Data to SheetDB"}
-                </button>
-              </div>
-            </div>
-
-            {/* URL Input Form */}
-            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-borderLight/60">
-              <span className="text-xs font-heading font-bold text-textSecondary">
-                SheetDB API URL:
-              </span>
-              <input
-                type="text"
-                value={sheetDbInput}
-                onChange={(e) => setSheetDbInput(e.target.value)}
-                placeholder="https://sheetdb.io/api/v1/your_api_id"
-                className="flex-1 min-w-[280px] text-xs px-3 py-1.5 rounded-lg border border-borderLight bg-cream/30 focus:outline-none focus:ring-1 focus:ring-emerald-600 font-mono"
-              />
-              <button
-                onClick={handleSaveSheetDb}
-                className="px-3 py-1.5 text-xs font-heading font-extrabold bg-accentBrown text-white hover:bg-[#3b2315] rounded-lg transition-all"
-              >
-                Save URL
-              </button>
-            </div>
-
-            {sheetBanner && (
-              <div
-                className={`text-xs px-3 py-2 rounded-lg font-bold flex items-center justify-between ${
-                  sheetBanner.type === "success"
-                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                    : "bg-rose-50 text-rose-800 border border-rose-200"
-                }`}
-              >
-                <span>{sheetBanner.text}</span>
-                <button onClick={() => setSheetBanner(null)} className="text-[11px] underline ml-2">
-                  Dismiss
-                </button>
-              </div>
-            )}
-          </div>
-
           {/* CLASS MASTERY HEATMAP & PERSONA QUALIFICATION MATRIX */}
           <div className="tiebreak-card p-6 bg-card space-y-4">
             <div className="flex flex-wrap justify-between items-center gap-2">
