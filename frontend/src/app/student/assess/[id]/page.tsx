@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Play, Send, Lightbulb, Clock, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw, Terminal } from "lucide-react";
 import { PillButton } from "@/components/ui/PillButton";
 import { SegmentedBar } from "@/components/ui/SegmentedBar";
-import { getQuestionDetail, runCode, submitCode, uploadTelemetryEvents } from "@/lib/api";
+import { getQuestionDetail, runCode, submitCode, uploadTelemetryEvents, getSocraticHint } from "@/lib/api";
 
 export default function AssessmentEditorPage() {
   const params = useParams();
@@ -23,7 +23,13 @@ export default function AssessmentEditorPage() {
   const [pasteCount, setPasteCount] = useState(0);
   const [tabSwitches, setTabSwitches] = useState(0);
   const [backspaceCount, setBackspaceCount] = useState(0);
+
+  // Custom Stdin & Socratic Hint states
+  const [customInputTab, setCustomInputTab] = useState<"tests" | "custom">("tests");
+  const [customInput, setCustomInput] = useState("");
   const [showHint, setShowHint] = useState(false);
+  const [hintLoading, setHintLoading] = useState(false);
+  const [hintData, setHintData] = useState<any>(null);
 
   // Execution outputs
   const [isRunning, setIsRunning] = useState(false);
@@ -98,14 +104,39 @@ export default function AssessmentEditorPage() {
 
   const handleRunCode = async () => {
     setIsRunning(true);
-    recordEvent("run", {});
+    recordEvent("run", { has_custom_input: !!customInput && customInputTab === "custom" });
     try {
-      const res = await runCode(code, language, questionId);
+      const activeCustomInput = customInputTab === "custom" && customInput.trim() ? customInput : undefined;
+      const res = await runCode(code, language, questionId, activeCustomInput);
       setRunResult(res);
     } catch (err: any) {
       setRunResult({ stdout: "", stderr: err.message, status: "error", passed_count: 0, total_count: 0 });
     } finally {
       setIsRunning(false);
+    }
+  };
+
+  const handleFetchHint = async () => {
+    setShowHint(true);
+    if (hintData) return;
+    setHintLoading(true);
+    try {
+      const res = await getSocraticHint({
+        code,
+        language,
+        question_id: questionId,
+        last_error: runResult?.stderr,
+        test_results: runResult?.test_results,
+      });
+      setHintData(res);
+    } catch (err) {
+      setHintData({
+        hint: "Review how the parameters are passed to your constructor or function. Ensure edge cases like null or missing arguments are validated before use.",
+        concept: "Design Robustness",
+        question: "What happens if this function is called with unexpected or empty input?",
+      });
+    } finally {
+      setHintLoading(false);
     }
   };
 
@@ -216,12 +247,55 @@ export default function AssessmentEditorPage() {
             spellCheck={false}
           />
 
+          {/* Custom Input Toggle & Tab Bar */}
+          <div className="border-t-[2px] border-borderLight pt-3">
+            <div className="flex items-center gap-2 mb-2">
+              <button
+                type="button"
+                onClick={() => setCustomInputTab("tests")}
+                className={`px-3 py-1 text-xs font-heading font-extrabold rounded-pill transition-all ${
+                  customInputTab === "tests"
+                    ? "bg-accentBrown text-white"
+                    : "bg-cream text-textSecondary hover:text-textPrimary"
+                }`}
+              >
+                Sample Test Cases
+              </button>
+              <button
+                type="button"
+                onClick={() => setCustomInputTab("custom")}
+                className={`px-3 py-1 text-xs font-heading font-extrabold rounded-pill transition-all ${
+                  customInputTab === "custom"
+                    ? "bg-accentTeal text-white"
+                    : "bg-cream text-textSecondary hover:text-textPrimary"
+                }`}
+              >
+                Custom Stdin Input ✏️
+              </button>
+            </div>
+
+            {customInputTab === "custom" && (
+              <div className="space-y-1.5 mb-2">
+                <span className="text-[11px] font-bold text-textMuted uppercase tracking-wider block">
+                  Provide custom command-line / standard input for real-time execution:
+                </span>
+                <textarea
+                  value={customInput}
+                  onChange={(e) => setCustomInput(e.target.value)}
+                  rows={3}
+                  className="w-full bg-[#FFFDF7] font-mono text-xs p-2.5 rounded-xl border-[2px] border-borderLight focus:border-accentTeal focus:outline-none text-textPrimary"
+                  placeholder="e.g. 1 2 3 or raw stdin parameters..."
+                />
+              </div>
+            )}
+          </div>
+
           {/* Action Buttons */}
-          <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
             <div className="flex gap-3">
               <PillButton variant="neutral" size="sm" onClick={handleRunCode} disabled={isRunning}>
                 <Play className="w-3.5 h-3.5 fill-current text-accentTeal" />
-                {isRunning ? "Running Sandbox..." : "Run Tests ▶"}
+                {isRunning ? "Running Sandbox..." : customInputTab === "custom" ? "Run with Custom Stdin ▶" : "Run Tests ▶"}
               </PillButton>
             </div>
 
@@ -233,18 +307,99 @@ export default function AssessmentEditorPage() {
 
           {/* Terminal / Run Results Output */}
           {runResult && (
-            <div className="mt-4 p-4 rounded-xl bg-accentBrown text-cream font-mono text-xs space-y-2 border-[2px] border-accentBrown">
-              <div className="flex items-center justify-between text-accentYellow border-b border-cream/20 pb-1">
+            <div className="mt-4 p-4 rounded-xl bg-accentBrown text-cream font-mono text-xs space-y-3 border-[2px] border-accentBrown shadow-[2px_2px_0_#2D1B0E]">
+              <div className="flex items-center justify-between text-accentYellow border-b border-cream/20 pb-2">
                 <span className="flex items-center gap-1.5 font-bold">
-                  <Terminal className="w-4 h-4" /> Sandbox Execution Console
+                  <Terminal className="w-4 h-4" /> Real-Time Sandbox Console
                 </span>
-                <span>Status: {runResult.status?.toUpperCase()}</span>
+                <div className="flex items-center gap-2">
+                  {runResult.runtime_ms && (
+                    <span className="text-[10px] text-cream/70 font-mono">
+                      ⏱ {runResult.runtime_ms}ms
+                    </span>
+                  )}
+                  <span className={`px-2 py-0.5 rounded-pill text-[10px] font-bold uppercase tracking-wider ${
+                    runResult.status === "passed" || runResult.status === "success"
+                      ? "bg-accentTeal text-white"
+                      : runResult.status === "syntax_error"
+                      ? "bg-accentRed text-white"
+                      : "bg-accentOrange text-white"
+                  }`}>
+                    {runResult.status?.toUpperCase()}
+                  </span>
+                </div>
               </div>
-              {runResult.stdout && <div>{runResult.stdout}</div>}
-              {runResult.stderr && <div className="text-rose-300">{runResult.stderr}</div>}
-              <div className="text-textMuted pt-1">
-                Passed {runResult.passed_count}/{runResult.total_count} sample test cases.
-              </div>
+
+              {/* Syntax Error Alert */}
+              {runResult.syntax_error && (
+                <div className="p-2.5 rounded-lg bg-accentRed/20 border border-accentRed/60 text-red-200 text-xs">
+                  <p className="font-bold flex items-center gap-1.5 text-white">
+                    <AlertTriangle className="w-4 h-4 text-accentRed" />
+                    Syntax Error Detected (Line {runResult.syntax_error.line}, Col {runResult.syntax_error.column})
+                  </p>
+                  <p className="font-mono text-[11px] mt-1 text-red-300">
+                    {runResult.syntax_error.text}
+                  </p>
+                  <p className="text-[10px] text-cream/80 mt-1">
+                    {runResult.syntax_error.message}
+                  </p>
+                </div>
+              )}
+
+              {/* Standard Output */}
+              {runResult.stdout && (
+                <div>
+                  <span className="text-[10px] font-bold text-cream/60 block uppercase">STDOUT:</span>
+                  <pre className="p-2 bg-black/30 rounded-lg whitespace-pre-wrap text-emerald-300 overflow-x-auto">
+                    {runResult.stdout}
+                  </pre>
+                </div>
+              )}
+
+              {/* Standard Error */}
+              {runResult.stderr && (
+                <div>
+                  <span className="text-[10px] font-bold text-cream/60 block uppercase">STDERR:</span>
+                  <pre className="p-2 bg-black/30 rounded-lg whitespace-pre-wrap text-rose-300 overflow-x-auto">
+                    {runResult.stderr}
+                  </pre>
+                </div>
+              )}
+
+              {/* Test Cases Results List */}
+              {runResult.test_results && runResult.test_results.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[10px] font-bold text-cream/60 uppercase block">
+                    Test Results ({runResult.passed_count}/{runResult.total_count} Passed):
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {runResult.test_results.map((tr: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className={`p-2 rounded-lg border text-[11px] ${
+                          tr.passed
+                            ? "bg-accentTeal/20 border-accentTeal/50 text-cream"
+                            : "bg-accentRed/20 border-accentRed/50 text-cream"
+                        }`}
+                      >
+                        <div className="flex justify-between items-center font-bold">
+                          <span>Case #{idx + 1}</span>
+                          <span>{tr.passed ? "PASSED ✅" : "FAILED ❌"}</span>
+                        </div>
+                        {tr.input && <div className="text-[10px] text-cream/70 truncate">Input: {tr.input}</div>}
+                        {tr.expected && <div className="text-[10px] text-cream/70 truncate">Expected: {tr.expected}</div>}
+                        {tr.actual && <div className="text-[10px] text-cream/90 truncate">Got: {tr.actual}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!runResult.test_results && runResult.total_count > 0 && (
+                <div className="text-cream/80 pt-1 text-[11px]">
+                  Passed {runResult.passed_count}/{runResult.total_count} test cases.
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -311,25 +466,36 @@ export default function AssessmentEditorPage() {
             <div className="flex items-center justify-between">
               <span className="text-xs font-heading font-extrabold uppercase text-textPrimary flex items-center gap-1.5">
                 <Lightbulb className="w-4 h-4 text-accentOrange fill-current" />
-                Socratic Hint
+                Adaptive Socratic Hint
               </span>
               <button
-                onClick={() => setShowHint(!showHint)}
-                className="text-[11px] font-heading font-extrabold text-accentOrange hover:underline"
+                onClick={handleFetchHint}
+                disabled={hintLoading}
+                className="text-[11px] font-heading font-extrabold text-accentOrange hover:underline cursor-pointer disabled:opacity-50"
               >
-                {showHint ? "Hide Hint" : "Reveal Hint"}
+                {hintLoading ? "Synthesizing..." : showHint ? "Refresh Hint" : "Reveal Hint"}
               </button>
             </div>
 
             {showHint ? (
-              <p className="text-xs font-semibold text-textPrimary leading-relaxed">
-                &ldquo;Look at your constructor initialization: if `repo` is omitted or null at runtime,
-                how does your class prevent a NullPointerException when `fetch_user` is invoked?
-                Can you guarantee it is never null?&rdquo;
-              </p>
+              <div className="space-y-2 text-xs">
+                {hintData?.concept && (
+                  <span className="inline-block px-2 py-0.5 rounded-pill bg-accentOrange/10 text-accentOrange font-bold text-[10px] uppercase">
+                    Focus: {hintData.concept}
+                  </span>
+                )}
+                {hintData?.question && (
+                  <p className="font-bold text-textPrimary italic">
+                    &ldquo;{hintData.question}&rdquo;
+                  </p>
+                )}
+                <p className="font-semibold text-textSecondary leading-relaxed">
+                  {hintData?.hint || "Review your constructor initialization and edge-case handling."}
+                </p>
+              </div>
             ) : (
               <p className="text-xs text-textMuted font-semibold">
-                Stuck on constructor injection? Click reveal for an adaptive hint.
+                Stuck or encountering an error? Click &lsquo;Reveal Hint&rsquo; for an AI-guided Socratic insight tailored to your code.
               </p>
             )}
           </div>

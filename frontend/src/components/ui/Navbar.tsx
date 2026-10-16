@@ -3,20 +3,47 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Zap, Flame, UserCheck, ShieldAlert, Award, Compass, Code, LayoutDashboard } from "lucide-react";
+import { Zap, ShieldAlert, Award, Compass, Code, LayoutDashboard, LogIn, UserCircle } from "lucide-react";
 
 export const Navbar: React.FC = () => {
   const pathname = usePathname();
   const [currentUser, setCurrentUser] = useState("student_a");
+  const [userProfile, setUserProfile] = useState<any>(null);
 
-  useEffect(() => {
+  const syncUser = () => {
     const saved = localStorage.getItem("brackyou_user");
     if (saved) setCurrentUser(saved);
+    const rawProfile = localStorage.getItem("brackyou_user_profile");
+    if (rawProfile) {
+      try {
+        setUserProfile(JSON.parse(rawProfile));
+      } catch (e) {
+        setUserProfile(null);
+      }
+    } else {
+      setUserProfile(null);
+    }
+  };
+
+  useEffect(() => {
+    syncUser();
+    window.addEventListener("userChanged", syncUser);
+    return () => window.removeEventListener("userChanged", syncUser);
   }, []);
 
   const handleUserChange = (userId: string) => {
     setCurrentUser(userId);
     localStorage.setItem("brackyou_user", userId);
+    // remove custom profile if selecting predefined demo
+    if (["student_a", "student_b", "trainer_1"].includes(userId)) {
+      const demoProfiles: Record<string, any> = {
+        student_a: { id: "student_a", name: "Alex Chen", role: "student", email: "alex@brackyou.dev", phone_number: "+1-555-0101" },
+        student_b: { id: "student_b", name: "Jonah Miller", role: "student", email: "jonah@brackyou.dev", phone_number: "+1-555-0102" },
+        trainer_1: { id: "trainer_1", name: "Dr. Sarah Vance", role: "trainer", email: "sarah.vance@brackyou.dev", phone_number: "+1-555-0105" },
+      };
+      localStorage.setItem("brackyou_user_profile", JSON.stringify(demoProfiles[userId]));
+      setUserProfile(demoProfiles[userId]);
+    }
     window.dispatchEvent(new Event("userChanged"));
   };
 
@@ -27,6 +54,19 @@ export const Navbar: React.FC = () => {
     { href: "/student/results/session_demo_alex", label: "Results & Replay", icon: Award },
     { href: "/trainer", label: "Trainer Console", icon: ShieldAlert },
   ];
+
+  const getInitials = () => {
+    if (userProfile?.name) {
+      const parts = userProfile.name.split(" ");
+      return parts.length > 1 ? `${parts[0][0]}${parts[1][0]}`.toUpperCase() : parts[0].slice(0, 2).toUpperCase();
+    }
+    if (currentUser === "student_a") return "AC";
+    if (currentUser === "student_b") return "JM";
+    if (currentUser === "trainer_1") return "SV";
+    return "ST";
+  };
+
+  const displayName = userProfile?.name || (currentUser === "student_a" ? "Alex Chen" : currentUser === "student_b" ? "Jonah Miller" : currentUser === "trainer_1" ? "Dr. Sarah Vance" : "Student");
 
   return (
     <header className="w-full bg-card border-b-[2.5px] border-accentBrown px-6 py-3.5 sticky top-0 z-50">
@@ -66,24 +106,42 @@ export const Navbar: React.FC = () => {
           })}
         </nav>
 
-        {/* Demo User Switcher & Avatar */}
+        {/* Demo User Switcher & Portal Action */}
         <div className="flex items-center gap-3">
           <div className="hidden lg:flex items-center gap-1 text-xs font-semibold bg-cream px-3 py-1.5 rounded-pill border-[2px] border-borderLight">
-            <span className="text-textMuted">Demo Persona:</span>
+            <span className="text-textMuted">Persona:</span>
             <select
               value={currentUser}
               onChange={(e) => handleUserChange(e.target.value)}
               className="bg-transparent font-bold text-accentOrange cursor-pointer focus:outline-none"
             >
               <option value="student_a">Alex Chen (Advanced)</option>
-              <option value="student_b">Jonah Miller (Remedial Loop)</option>
+              <option value="student_b">Jonah Miller (Remedial)</option>
               <option value="trainer_1">Dr. Sarah Vance (Trainer)</option>
+              {userProfile && !["student_a", "student_b", "trainer_1"].includes(userProfile.id) && (
+                <option value={userProfile.id}>{userProfile.name} (Custom)</option>
+              )}
             </select>
           </div>
 
-          <div className="w-9 h-9 rounded-full bg-accentYellow border-[2px] border-accentBrown flex items-center justify-center text-textPrimary font-heading font-bold text-sm shadow-[0_2px_0_#4A2C1A]">
-            {currentUser === "student_a" ? "AC" : currentUser === "student_b" ? "JM" : "SV"}
-          </div>
+          {/* Link to Login Portal */}
+          <Link
+            href="/login"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-pill border-[2px] border-accentBrown bg-cream hover:bg-card text-textPrimary text-xs font-heading font-extrabold shadow-[0_2px_0_#2D1B0E] transition-all"
+            title="Student / Trainer Login Portal"
+          >
+            <LogIn className="w-3.5 h-3.5 text-accentOrange" />
+            <span>Portal</span>
+          </Link>
+
+          {/* User Initials Avatar */}
+          <Link
+            href="/login"
+            title={`Logged in as ${displayName} (${userProfile?.email || "Demo"})`}
+            className="w-9 h-9 rounded-full bg-accentYellow border-[2px] border-accentBrown flex items-center justify-center text-textPrimary font-heading font-bold text-xs shadow-[0_2px_0_#4A2C1A] hover:scale-105 transition-transform"
+          >
+            {getInitials()}
+          </Link>
         </div>
       </div>
     </header>

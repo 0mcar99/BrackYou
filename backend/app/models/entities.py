@@ -22,6 +22,8 @@ class User(Base):
     id = Column(String(50), primary_key=True)
     name = Column(String(100), nullable=False)
     email = Column(String(255), unique=True, nullable=False)
+    phone_number = Column(String(30), nullable=True)
+    password_hash = Column(String(255), nullable=True)
     role = Column(String(20), default="student")  # student, trainer, admin
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -174,3 +176,18 @@ class VivaRecord(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    # Safe SQLite column migration if database was created previously
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            # Check existing columns
+            res = conn.execute(text("PRAGMA table_info(users)"))
+            cols = [row[1] for row in res.fetchall()]
+            if "phone_number" not in cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN phone_number VARCHAR(30)"))
+                conn.commit()
+            if "password_hash" not in cols:
+                conn.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)"))
+                conn.commit()
+    except Exception as e:
+        pass

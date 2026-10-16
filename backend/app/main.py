@@ -44,6 +44,14 @@ def root():
         "docs_url": "/docs"
     }
 
+@app.get("/api/health")
+def health():
+    return {
+        "status": "healthy",
+        "service": "BrackYou API",
+        "version": "1.0.0"
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend.app.main:app", host="0.0.0.0", port=8000, reload=True)

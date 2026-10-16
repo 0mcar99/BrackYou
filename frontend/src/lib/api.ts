@@ -16,6 +16,22 @@ export async function fetchJson(endpoint: string, options: RequestInit = {}) {
   return res.json();
 }
 
+// Auth & User Portal
+export const registerUser = (payload: { name: string; phone_number: string; email: string; password: string; role?: string }) =>
+  fetchJson("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const loginUser = (payload: { identifier: string; password?: string }) =>
+  fetchJson("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const getMe = (userId: string) => fetchJson(`/auth/me?user_id=${encodeURIComponent(userId)}`);
+export const listUsers = () => fetchJson("/auth/users");
+
 // Curriculum
 export const getCurriculumGraph = () => fetchJson("/curriculum/graph");
 export const getConcepts = () => fetchJson("/curriculum/concepts");
@@ -28,10 +44,15 @@ export const getNextActivity = (studentId: string, targetConceptId = "dependency
 // Assessment
 export const getQuestions = () => fetchJson("/assessment/questions");
 export const getQuestionDetail = (id: string) => fetchJson(`/assessment/questions/${id}`);
-export const runCode = (code: string, language: string, questionId: string) => 
+export const runCode = (code: string, language: string, questionId?: string, customInput?: string) => 
   fetchJson("/assessment/run", {
     method: "POST",
-    body: JSON.stringify({ code, language, question_id: questionId })
+    body: JSON.stringify({ code, language, question_id: questionId, custom_input: customInput })
+  });
+export const getSocraticHint = (payload: { code: string; language: string; question_id: string; last_error?: string; test_results?: any[] }) =>
+  fetchJson("/assessment/hint", {
+    method: "POST",
+    body: JSON.stringify(payload)
   });
 export const submitCode = (payload: { student_id: string; question_id: string; code: string; language: string; session_id?: string }) =>
   fetchJson("/assessment/submit", {

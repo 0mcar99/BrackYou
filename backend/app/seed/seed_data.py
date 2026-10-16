@@ -6,22 +6,44 @@ from backend.app.models.entities import (
     Submission, SessionEvent, IntegritySignal, VivaRecord
 )
 
+from backend.app.api.auth import hash_password
+
 def populate_seed_data():
     init_db()
     db = SessionLocal()
 
+    # Backfill or update default credentials if seeded previously
+    demo_creds = {
+        "student_a": ("Alex Chen", "alex@brackyou.dev", "+1-555-0101"),
+        "student_b": ("Jonah Miller", "jonah@brackyou.dev", "+1-555-0102"),
+        "student_c": ("Priya Patel", "priya@brackyou.dev", "+1-555-0103"),
+        "student_d": ("Sam Taylor", "sam@brackyou.dev", "+1-555-0104"),
+        "trainer_1": ("Dr. Sarah Vance", "sarah.vance@brackyou.dev", "+1-555-0105"),
+    }
+
     # Check if already seeded
-    if db.query(User).filter(User.id == "student_a").first():
+    existing_a = db.query(User).filter(User.id == "student_a").first()
+    if existing_a:
+        # Backfill missing phone and password
+        for uid, (name, email, phone) in demo_creds.items():
+            u = db.query(User).filter(User.id == uid).first()
+            if u:
+                if not u.phone_number:
+                    u.phone_number = phone
+                if not u.password_hash:
+                    u.password_hash = hash_password("password123")
+        db.commit()
         db.close()
         return
 
     # 1. Users
+    default_pw_hash = hash_password("password123")
     users = [
-        User(id="student_a", name="Alex Chen", email="alex@brackyou.dev", role="student"),
-        User(id="student_b", name="Jonah Miller", email="jonah@brackyou.dev", role="student"),
-        User(id="student_c", name="Priya Patel", email="priya@brackyou.dev", role="student"),
-        User(id="student_d", name="Sam Taylor", email="sam@brackyou.dev", role="student"),
-        User(id="trainer_1", name="Dr. Sarah Vance", email="sarah.vance@brackyou.dev", role="trainer"),
+        User(id="student_a", name="Alex Chen", email="alex@brackyou.dev", phone_number="+1-555-0101", password_hash=default_pw_hash, role="student"),
+        User(id="student_b", name="Jonah Miller", email="jonah@brackyou.dev", phone_number="+1-555-0102", password_hash=default_pw_hash, role="student"),
+        User(id="student_c", name="Priya Patel", email="priya@brackyou.dev", phone_number="+1-555-0103", password_hash=default_pw_hash, role="student"),
+        User(id="student_d", name="Sam Taylor", email="sam@brackyou.dev", phone_number="+1-555-0104", password_hash=default_pw_hash, role="student"),
+        User(id="trainer_1", name="Dr. Sarah Vance", email="sarah.vance@brackyou.dev", phone_number="+1-555-0105", password_hash=default_pw_hash, role="trainer"),
     ]
     db.add_all(users)
     db.commit()

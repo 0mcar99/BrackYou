@@ -4,6 +4,7 @@ import tempfile
 import time
 import os
 import re
+import shutil
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 
@@ -17,17 +18,18 @@ class TestResult:
     execution_time_ms: int
     is_hidden: bool
     error: Optional[str] = None
+    diff_hint: Optional[str] = None
 
 class HardenedSandbox:
     def __init__(self, timeout_sec: float = 3.0, memory_limit_mb: int = 128):
         self.timeout_sec = timeout_sec
         self.memory_limit_mb = memory_limit_mb
+        self.node_path = shutil.which("node")
 
     def check_adversarial_patterns(self, code: str, language: str) -> Optional[str]:
         """
         Pre-flight static security check for hostile submissions
         """
-        # Forbidden system calls and host tampering
         forbidden_patterns = [
             (r'socket\s*\.\s*socket', "Network egress forbidden (socket creation blocked)."),
             (r'urllib|requests|http\.client', "Network egress forbidden (HTTP client blocked)."),
@@ -43,11 +45,32 @@ class HardenedSandbox:
                 return reason
         return None
 
+    def validate_syntax(self, code: str, language: str) -> Optional[Dict[str, Any]]:
+        """
+        Pre-execution AST syntax verification for real-time accuracy.
+        Catches syntax errors before executing.
+        """
+        if language.lower() in ("python", "py"):
+            try:
+                compile(code, "<student_code>", "exec")
+                return None
+            except SyntaxError as e:
+                line_snippet = e.text.strip() if e.text else ""
+                pointer = " " * (max(0, (e.offset or 1) - 1)) + "^"
+                formatted_err = f"SyntaxError on line {e.lineno}, col {e.offset}: {e.msg}\n    {line_snippet}\n    {pointer}"
+                return {
+                    "line": e.lineno,
+                    "offset": e.offset,
+                    "message": e.msg,
+                    "formatted": formatted_err
+                }
+        return None
+
     def execute_python_code(self, code: str, stdin_data: str = "") -> Dict[str, Any]:
         """
         Executes Python code in an isolated subprocess with strict watchdog timeout.
         """
-        # Run pre-flight check
+        # 1. Pre-flight security check
         security_alert = self.check_adversarial_patterns(code, "python")
         if security_alert:
             return {
@@ -58,36 +81,58 @@ class HardenedSandbox:
                 "status": "security_violation"
             }
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+        # 2. Syntax validation
+        syntax_err = self.validate_syntax(code, "python")
+        if syntax_err:
+            return {
+                "stdout": "",
+                "stderr": syntax_err["formatted"],
+                "exit_code": 1,
+                "duration_ms": 1,
+                "status": "syntax_error",
+                "syntax_error": syntax_err
+            }
+
+        # 3. Create isolated ephemeral script
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
             f.write(code)
             temp_path = f.name
 
         try:
             start_time = time.perf_counter()
-            # Windows/Linux compatible subprocess invocation with timeout
-            proc = subprocess.run(
-                [sys.executable, temp_path],
-                input=stdin_data,
+            proc = subprocess.Popen(
+                [sys.executable, "-u", temp_path],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                capture_output=True,
-                timeout=self.timeout_sec
+                encoding="utf-8",
+                errors="replace"
             )
-            elapsed_ms = int((time.perf_counter() - start_time) * 1000)
-            return {
-                "stdout": proc.stdout,
-                "stderr": proc.stderr,
-                "exit_code": proc.returncode,
-                "duration_ms": elapsed_ms,
-                "status": "passed" if proc.returncode == 0 else "error"
-            }
-        except subprocess.TimeoutExpired:
-            return {
-                "stdout": "",
-                "stderr": f"TIME LIMIT EXCEEDED: Execution halted after exceeding safety watchdog limit ({int(self.timeout_sec * 1000)}ms). Potential infinite loop contained.",
-                "exit_code": 124,
-                "duration_ms": int(self.timeout_sec * 1000),
-                "status": "tle"
-            }
+
+            try:
+                stdout_data, stderr_data = proc.communicate(
+                    input=stdin_data,
+                    timeout=self.timeout_sec
+                )
+                elapsed_ms = max(1, int((time.perf_counter() - start_time) * 1000))
+                return {
+                    "stdout": stdout_data or "",
+                    "stderr": stderr_data or "",
+                    "exit_code": proc.returncode,
+                    "duration_ms": elapsed_ms,
+                    "status": "passed" if proc.returncode == 0 else "runtime_error"
+                }
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+                return {
+                    "stdout": "",
+                    "stderr": f"TIME LIMIT EXCEEDED: Execution halted after safety limit ({int(self.timeout_sec * 1000)}ms). Potential infinite loop contained.",
+                    "exit_code": 124,
+                    "duration_ms": int(self.timeout_sec * 1000),
+                    "status": "tle"
+                }
         except Exception as e:
             return {
                 "stdout": "",
@@ -103,16 +148,151 @@ class HardenedSandbox:
                 except Exception:
                     pass
 
+    def execute_js_code(self, code: str, stdin_data: str = "") -> Dict[str, Any]:
+        """
+        Executes JavaScript code via Node.js runtime if available
+        """
+        if not self.node_path:
+            return {
+                "stdout": "",
+                "stderr": "Node.js runtime not found on host environment.",
+                "exit_code": 1,
+                "duration_ms": 0,
+                "status": "error"
+            }
+
+        security_alert = self.check_adversarial_patterns(code, "javascript")
+        if security_alert:
+            return {
+                "stdout": "",
+                "stderr": f"SECURITY POLICY VIOLATION: {security_alert}",
+                "exit_code": 126,
+                "duration_ms": 1,
+                "status": "security_violation"
+            }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".js", delete=False, encoding="utf-8") as f:
+            f.write(code)
+            temp_path = f.name
+
+        try:
+            start_time = time.perf_counter()
+            proc = subprocess.Popen(
+                [self.node_path, temp_path],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace"
+            )
+
+            try:
+                stdout_data, stderr_data = proc.communicate(input=stdin_data, timeout=self.timeout_sec)
+                elapsed_ms = max(1, int((time.perf_counter() - start_time) * 1000))
+                return {
+                    "stdout": stdout_data or "",
+                    "stderr": stderr_data or "",
+                    "exit_code": proc.returncode,
+                    "duration_ms": elapsed_ms,
+                    "status": "passed" if proc.returncode == 0 else "runtime_error"
+                }
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+                return {
+                    "stdout": "",
+                    "stderr": f"TIME LIMIT EXCEEDED: Execution halted after ({int(self.timeout_sec * 1000)}ms).",
+                    "exit_code": 124,
+                    "duration_ms": int(self.timeout_sec * 1000),
+                    "status": "tle"
+                }
+        finally:
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+
+    def execute_code(self, code: str, language: str, stdin_data: str = "") -> Dict[str, Any]:
+        """
+        Universal language execution dispatcher
+        """
+        lang = language.lower()
+        if lang in ("python", "py"):
+            return self.execute_python_code(code, stdin_data)
+        elif lang in ("javascript", "js", "node"):
+            return self.execute_js_code(code, stdin_data)
+        else:
+            # Default to Python execution engine
+            return self.execute_python_code(code, stdin_data)
+
+    def normalize_output(self, text: str) -> str:
+        """
+        Normalizes line endings and trailing whitespace for accurate matching
+        """
+        if not text:
+            return ""
+        lines = [line.rstrip() for line in text.replace("\r\n", "\n").split("\n")]
+        # Remove trailing empty lines
+        while lines and not lines[-1]:
+            lines.pop()
+        return "\n".join(lines).strip()
+
+    def compare_outputs(self, actual: str, expected: str) -> bool:
+        """
+        Compares actual output with expected output, with tolerance for float rounding
+        """
+        norm_actual = self.normalize_output(actual)
+        norm_expected = self.normalize_output(expected)
+
+        if norm_actual == norm_expected:
+            return True
+
+        # Try floating point tolerance match if both are numbers or single value
+        try:
+            f_act = float(norm_actual)
+            f_exp = float(norm_expected)
+            if abs(f_act - f_exp) < 0.05:
+                return True
+        except ValueError:
+            pass
+
+        return False
+
     def run_test_suite(
         self, 
         code: str, 
         language: str, 
-        test_cases: List[Dict[str, Any]]
+        test_cases: List[Dict[str, Any]],
+        custom_input: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Runs the student's submission against sample and hidden test cases.
-        Hidden inputs/expected outputs are never exposed in the client response.
+        Runs the student's submission against sample and hidden test cases in real-time.
         """
+        # If user provided custom test input, run directly against it
+        if custom_input is not None:
+            res = self.execute_code(code, language, custom_input)
+            return {
+                "custom_run": True,
+                "passed_count": 1 if res["status"] == "passed" else 0,
+                "total_count": 1,
+                "execution_time_ms": res["duration_ms"],
+                "status": res["status"],
+                "stdout": res["stdout"],
+                "stderr": res["stderr"],
+                "test_details": [{
+                    "name": "Custom Input Execution",
+                    "passed": res["status"] == "passed",
+                    "is_hidden": False,
+                    "input_data": custom_input,
+                    "expected_output": "[Custom User Stdin]",
+                    "actual_output": res["stdout"].strip(),
+                    "execution_time_ms": res["duration_ms"],
+                    "error": res["stderr"] if res["status"] != "passed" else None
+                }]
+            }
+
         results: List[TestResult] = []
         passed_count = 0
         total_time_ms = 0
@@ -141,16 +321,34 @@ class HardenedSandbox:
                 ]
             }
 
-        # If language is Java, we can simulate Java execution or execute via javac/java if installed,
-        # or execute test cases with a Python runner translation for the hackathon prototype.
-        # For full multi-language, execute Python directly:
+        # Syntax check check first to fail fast with line number
+        syntax_err = self.validate_syntax(code, language)
+        if syntax_err:
+            return {
+                "passed_count": 0,
+                "total_count": len(test_cases),
+                "execution_time_ms": 1,
+                "status": "syntax_error",
+                "stdout": "",
+                "stderr": syntax_err["formatted"],
+                "test_details": [
+                    {
+                        "name": tc.get("name", f"Test {idx+1}"),
+                        "passed": False,
+                        "is_hidden": tc.get("is_hidden", False),
+                        "error": f"SyntaxError on line {syntax_err['line']}: {syntax_err['message']}"
+                    }
+                    for idx, tc in enumerate(test_cases)
+                ]
+            }
+
         for idx, tc in enumerate(test_cases):
-            tc_name = tc.get("name", f"Test {idx + 1}")
+            tc_name = tc.get("name", f"Test Case {idx + 1}")
             inp = tc.get("input_data", "")
-            expected = tc.get("expected_output", "").strip()
+            expected = tc.get("expected_output", "")
             is_hidden = tc.get("is_hidden", False)
 
-            res = self.execute_python_code(code, inp)
+            res = self.execute_code(code, language, inp)
             total_time_ms += res["duration_ms"]
 
             if not first_stdout and res["stdout"]:
@@ -172,9 +370,7 @@ class HardenedSandbox:
                 ))
                 break
 
-            actual = res["stdout"].strip()
-            # Loose match (ignoring carriage returns)
-            passed = (actual == expected) and (res["exit_code"] == 0)
+            passed = self.compare_outputs(res["stdout"], expected) and (res["exit_code"] == 0)
             if passed:
                 passed_count += 1
             else:
@@ -186,7 +382,7 @@ class HardenedSandbox:
                 passed=passed,
                 input_data="[HIDDEN]" if is_hidden else inp,
                 expected_output="[HIDDEN]" if is_hidden else expected,
-                actual_output="[HIDDEN]" if is_hidden else actual,
+                actual_output="[HIDDEN]" if is_hidden else res["stdout"].strip(),
                 execution_time_ms=res["duration_ms"],
                 is_hidden=is_hidden,
                 error=res["stderr"] if not passed and res["stderr"] else None
