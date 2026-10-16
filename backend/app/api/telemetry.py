@@ -254,9 +254,9 @@ if __name__ == '__main__':
             mastery_pct=current_bkt_pct,
             viva_match_pct=viva_payload.get("match_score", 85),
             passed_ratio=(passed_count / max(total_count, 1)),
-            paste_count=len([s for s in sig_dicts if s["signal_type"] == "large_paste"]),
-            max_paste_chars=max([s.get("char_count", 0) for s in sig_dicts] or [0]),
-            run_count=len([e for e in ev_dicts if e["type"] == "run"]),
+            paste_count=len([s for s in signals_data if s.get("signal_type") == "large_paste"]),
+            max_paste_chars=max([s.get("char_count", 0) for s in signals_data] or [0]),
+            run_count=len([e for e in ev_dicts if e.get("type") == "run"]),
             critical_prereqs_count=0
         ),
         "viva": viva_payload

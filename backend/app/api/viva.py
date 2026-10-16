@@ -70,14 +70,6 @@ def evaluate_viva_answer(req: AnswerVivaRequest, db=Depends(get_db)):
         "match_score": result["match_score"],
         "status": result["status"],
         "feedback": result["feedback"],
-        "concept_solid": result["concept_solid"]
-    }
-
-    return {
-        "viva_id": viva_record.id,
-        "submission_id": sub.id,
-        "match_score": result["match_score"],
-        "status": result["status"],
-        "feedback": result["feedback"],
+        "rubric_feedback": result["feedback"],
         "concept_solid": result["concept_solid"]
     }
