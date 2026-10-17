@@ -1,10 +1,18 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Navbar } from "@/components/ui/Navbar";
 
 export const metadata: Metadata = {
   title: "BrackYou — Adaptive Learning & Assessment Portal",
   description: "Knowledge-tracing adaptive curriculum, hardened code sandbox, and keystroke forensic telemetry.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

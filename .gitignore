@@ -20,3 +20,10 @@ frontend/build/
 .env.local
 .DS_Store
 Thumbs.db
+
+# Mobile / Capacitor
+frontend/android/.gradle/
+frontend/android/app/build/
+frontend/android/build/
+frontend/ios/App/build/
+frontend/ios/App/Pods/
