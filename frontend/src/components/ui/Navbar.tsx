@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Zap, ShieldAlert, Award, Compass, Code, LayoutDashboard, LogIn, UserCircle } from "lucide-react";
+import { Zap, ShieldAlert, Award, Compass, Code, LayoutDashboard, LogIn, UserCircle, Layers } from "lucide-react";
 
 export const Navbar: React.FC = () => {
   const pathname = usePathname();
@@ -49,6 +49,7 @@ export const Navbar: React.FC = () => {
 
   const navLinks = [
     { href: "/student/dashboard", label: "My Dashboard", icon: LayoutDashboard },
+    { href: "/dashboard", label: "Mastery Hub", icon: Layers },
     { href: "/student/learn", label: "Skill Tree (DAG)", icon: Compass },
     { href: "/student/assess/q_di_1", label: "Live Assessment", icon: Code },
     { href: "/student/results/session_demo_alex", label: "Results & Replay", icon: Award },

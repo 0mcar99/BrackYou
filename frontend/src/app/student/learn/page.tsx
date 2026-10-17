@@ -73,7 +73,12 @@ export default function SkillTreePage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-textSecondary">Active Persona:</span>
+          <Link
+            href="/dashboard"
+            className="px-3 py-1.5 bg-[#E8622B] text-white text-xs font-heading font-black rounded-pill border-[2px] border-[#4A2C1A] shadow-[2px_2px_0px_#4A2C1A] hover:bg-[#d45520]"
+          >
+            ⚡ Open Full PS2 Knowledge DAG & Replay
+          </Link>
           <span className="px-3 py-1 bg-accentOrange/10 border-[1.5px] border-accentOrange rounded-pill text-xs font-heading font-extrabold text-accentOrange">
             {userId === "student_a" ? "Alex Chen (Advanced)" : "Jonah Miller (Remedial)"}
           </span>

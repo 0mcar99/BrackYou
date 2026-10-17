@@ -24,6 +24,10 @@ import { RibbonCard } from "@/components/ui/RibbonCard";
 import { SegmentedBar } from "@/components/ui/SegmentedBar";
 import { PillButton } from "@/components/ui/PillButton";
 import { getSessionReplay, evaluateViva, addStudentRebuttal } from "@/lib/api";
+import { SessionReplayPlayer } from "@/components/replay/SessionReplayPlayer";
+import { VivaDefenseModal } from "@/components/viva/VivaDefenseModal";
+import { SessionPlaybackData } from "@/types/telemetry";
+import { VivaQuestionTarget } from "@/types/viva";
 
 export default function ResultsDashboardPage() {
   const params = useParams();
@@ -160,12 +164,41 @@ export default function ResultsDashboardPage() {
 
   const signals = replayData?.signals || [];
   const totalDurationMs = replayData?.total_duration_ms || 456000;
+  const [isVivaModalOpen, setIsVivaModalOpen] = useState(false);
 
   const formatMs = (ms: number) => {
     const totalSec = Math.floor(ms / 1000);
     const m = Math.floor(totalSec / 60);
     const s = totalSec % 60;
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  const playbackData: SessionPlaybackData = {
+    sessionId,
+    totalDurationMs: totalDurationMs || 456000,
+    integrityScore: replayData?.integrity_score ?? 84,
+    backspaceRatio: replayData?.backspace_ratio ?? 15,
+    writeRunFixCycles: replayData?.run_cycles ?? 5,
+    anomalies: (signals || []).map((s: any) => ({
+      timestampMs: s.timestamp_offset_ms || 0,
+      timeFormatted: formatMs(s.timestamp_offset_ms || 0),
+      type: s.signal_type === "large_paste" ? "PASTE_BURST" : s.signal_type === "tab_blur" ? "TAB_BLUR" : "NO_CORRECTIONS",
+      severity: s.signal_type === "large_paste" ? "high" : "medium",
+      charDelta: s.char_count || 340,
+      description: s.evidence_description || "Flagged event"
+    })),
+    events: replayData?.events && replayData.events.length > 0 ? replayData.events : [
+      { t: 0, type: 'window', action: 'focus', contentSnapshot: '# Workspace initialized\n' },
+      { t: 180000, type: 'key', action: 'insert', contentSnapshot: 'class UserRepository:\n    def get_user(self, user_id):\n        return f"User_{user_id}"\n' },
+      { t: 374000, type: 'paste', action: 'insert', contentSnapshot: submittedCode }
+    ]
+  };
+
+  const vivaTarget: VivaQuestionTarget = {
+    id: "q_viva_ast_result",
+    lineRange: [6, 11],
+    targetedConstruct: "Constructor Injection Null Guard",
+    question: vivaQuestion
   };
 
   return (
@@ -409,149 +442,7 @@ export default function ResultsDashboardPage() {
       </div>
 
       {/* SCREENSHOT 3: FORMAT 6 — PROCESS INTEGRITY & TIMELINE SCRUBBER */}
-      <div className="tiebreak-card p-6 bg-card space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b-[2px] border-borderLight pb-3">
-          <div>
-            <span className="text-xs font-heading font-extrabold uppercase tracking-widest text-textSecondary block">
-              6. Process Integrity & Timeline Scrubber
-            </span>
-            <span className="text-xs font-semibold text-textMuted">
-              Falsifiable evidence timeline deep-linked to exact replay moments
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span
-              className={`text-xs font-heading font-extrabold px-3 py-1 rounded-pill border-[1.5px] ${
-                signals.length > 0
-                  ? "bg-amber-50 text-amber-800 border-amber-400"
-                  : "bg-emerald-50 text-emerald-800 border-emerald-400"
-              }`}
-            >
-              {signals.length > 0
-                ? `${signals.length} Evidence Marker${signals.length > 1 ? "s" : ""} Flagged for Review`
-                : "0 Anomalies Detected (Clean Session)"}
-            </span>
-          </div>
-        </div>
-
-        {/* Visual Timeline Bar with Event Markers */}
-        <div className="space-y-3 py-2">
-          <div className="h-7 w-full bg-cream rounded-pill border-[2px] border-accentBrown relative flex items-center px-4">
-            {/* Start point at 0% */}
-            <div className="absolute left-[2%] w-3 h-3 rounded-full bg-accentTeal" title="Session Start (00:00)" />
-
-            {/* Dynamic Event Markers positioned by actual timestamp */}
-            {signals.map((sig: any, idx: number) => {
-              const pct = Math.min(92, Math.max(8, Math.round((sig.timestamp_offset_ms / totalDurationMs) * 100)));
-              const isSelected = selectedSignal?.id === sig.id;
-              return (
-                <button
-                  key={idx}
-                  onClick={() => {
-                    setSelectedSignal(sig);
-                    if (sig.student_rebuttal) setRebuttalText(sig.student_rebuttal);
-                  }}
-                  style={{ left: `${pct}%` }}
-                  className={`absolute -top-1 w-6 h-6 rounded-full flex items-center justify-center font-heading font-extrabold text-[11px] border-[2px] border-accentBrown shadow-sm transition-transform cursor-pointer ${
-                    isSelected ? "scale-125 z-20 ring-2 ring-accentOrange" : "hover:scale-110"
-                  } ${
-                    sig.signal_type === "large_paste"
-                      ? "bg-accentRed text-white animate-pulse"
-                      : "bg-accentYellow text-accentBrown"
-                  }`}
-                  title={`${sig.signal_type}: Click to view at ${formatMs(sig.timestamp_offset_ms)}`}
-                >
-                  {sig.signal_type === "large_paste" ? "⚠" : "●"}
-                </button>
-              );
-            })}
-
-            {/* Fallback default timeline markers if no signals yet (e.g., initial live run) */}
-            {signals.length === 0 && (
-              <>
-                <div className="absolute left-[35%] w-3 h-3 rounded-full bg-accentYellow border border-accentBrown" title="First Keystroke Cadence" />
-                <div className="absolute left-[65%] w-3 h-3 rounded-full bg-accentTeal" title="Test Iteration" />
-              </>
-            )}
-
-            {/* Final Submission point at 96% */}
-            <div className="absolute right-[2%] w-3.5 h-3.5 rounded-full bg-accentTeal border-[1.5px] border-accentBrown" title="Submission Completed" />
-          </div>
-
-          {/* Timeline labels matching Screenshot 3 */}
-          <div className="flex justify-between text-[11px] font-mono font-semibold text-textMuted px-2">
-            <span>00:00</span>
-            <span>03:30 (Focus lost)</span>
-            <span className="text-accentRed font-bold font-heading">
-              {signals[0] ? `${formatMs(signals[0].timestamp_offset_ms)} (Large Paste Flag)` : "06:14 (Large Paste Flag)"}
-            </span>
-            <span>{formatMs(totalDurationMs)} (Submit)</span>
-          </div>
-        </div>
-
-        {/* Selected Flagged Moment Detail Card (Screenshot 3) */}
-        {selectedSignal ? (
-          <div className="p-4 rounded-2xl bg-rose-50/80 border-[2px] border-rose-300 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-heading font-extrabold text-accentRed flex items-center gap-1.5 uppercase">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                FLAGGED MOMENT: {formatMs(selectedSignal.timestamp_offset_ms)} —{" "}
-                {selectedSignal.signal_type === "large_paste"
-                  ? `LARGE PASTE OPERATION (${selectedSignal.char_count || 340} CHARACTERS)`
-                  : selectedSignal.signal_type.toUpperCase()}
-              </span>
-              <span className="text-[11px] font-bold text-textSecondary bg-white px-2.5 py-0.5 rounded-pill border border-rose-200">
-                Evidence For Review
-              </span>
-            </div>
-
-            <p className="text-xs font-semibold text-textPrimary leading-relaxed">
-              {selectedSignal.evidence_description ||
-                "340 characters appeared in 1 tick without keystrokes. Followed by immediate compilation."}
-            </p>
-
-            {/* Interactive Student Rebuttal Box */}
-            <div className="text-[11px] font-semibold text-textSecondary border-t border-rose-200 pt-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <span>
-                  Student Rebuttal: &ldquo;
-                  {selectedSignal.student_rebuttal || rebuttalText || "I consulted the official documentation to check constructor signatures."}
-                  &rdquo;
-                </span>
-                <span className="text-accentTeal font-bold uppercase tracking-wider text-[10px]">
-                  Human Review: {selectedSignal.trainer_disposition || "Pending Trainer"}
-                </span>
-              </div>
-
-              {!selectedSignal.student_rebuttal && (
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="text"
-                    value={rebuttalText}
-                    onChange={(e) => setRebuttalText(e.target.value)}
-                    placeholder="Provide your technical explanation for the trainer..."
-                    className="flex-1 px-3 py-1.5 rounded-xl border-[1.5px] border-rose-300 bg-white text-xs text-textPrimary focus:outline-none focus:border-accentBrown"
-                  />
-                  <PillButton
-                    variant="neutral"
-                    size="sm"
-                    onClick={handleSaveRebuttal}
-                    disabled={isSubmittingRebuttal || !rebuttalText.trim()}
-                  >
-                    <Send className="w-3 h-3 mr-1" />
-                    Submit Rebuttal
-                  </PillButton>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="p-4 rounded-2xl bg-cream/60 border-[1.5px] border-borderLight text-xs text-textSecondary">
-            Click on any timeline flag to inspect the recorded biometric evidence and provide a rebuttal.
-          </div>
-        )}
-      </div>
+      <SessionReplayPlayer playbackData={playbackData} />
 
       {/* SCREENSHOT 1: EXPLAIN-YOUR-CODE AI VIVA */}
       <div className="tiebreak-card p-6 bg-card space-y-4 border-accentTeal border-[2.5px]">
@@ -560,9 +451,18 @@ export default function ResultsDashboardPage() {
             <MessageSquare className="w-4 h-4" />
             Explain-Your-Code AI Viva
           </span>
-          <span className="text-xs font-heading font-extrabold px-2.5 py-0.5 rounded-pill bg-accentTeal/15 text-accentTeal border border-accentTeal/30">
-            Comprehension Match: {vivaResult?.match_score ?? 95}%
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsVivaModalOpen(true)}
+              className="px-3 py-1 bg-accentOrange text-white text-xs font-heading font-black rounded-pill hover:bg-accentOrange/90 border border-accentBrown shadow-sm"
+            >
+              🎙️ Interactive Oral Defense Modal
+            </button>
+            <span className="text-xs font-heading font-extrabold px-2.5 py-0.5 rounded-pill bg-accentTeal/15 text-accentTeal border border-accentTeal/30">
+              Comprehension Match: {vivaResult?.match_score ?? 95}%
+            </span>
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -633,6 +533,21 @@ export default function ResultsDashboardPage() {
           </div>
         </div>
       </div>
+
+      <VivaDefenseModal
+        isOpen={isVivaModalOpen}
+        question={vivaTarget}
+        submittedCode={submittedCode}
+        onComplete={(res) => {
+          setVivaResult({
+            match_score: res.semanticMatchPercent,
+            status: "Verified",
+            feedback: res.evaluatorFeedback,
+          });
+          setVivaAnswer(res.studentExplanation);
+        }}
+        onClose={() => setIsVivaModalOpen(false)}
+      />
     </div>
   );
 }
