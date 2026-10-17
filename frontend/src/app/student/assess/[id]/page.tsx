@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Play, Send, Lightbulb, Clock, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw, Terminal, BookOpen, Sparkles, X } from "lucide-react";
 import { PillButton } from "@/components/ui/PillButton";
 import { SegmentedBar } from "@/components/ui/SegmentedBar";
-import { getQuestionDetail, runCode, submitCode, uploadTelemetryEvents, getSocraticHint, explainFailedTest } from "@/lib/api";
+import { getQuestionDetail, runCode, submitCode, uploadTelemetryEvents, getSocraticHint, explainFailedTest, tutorChat } from "@/lib/api";
 
 export default function AssessmentEditorPage() {
   const params = useParams();
@@ -35,6 +35,9 @@ export default function AssessmentEditorPage() {
   const [tutorModalOpen, setTutorModalOpen] = useState(false);
   const [tutorLoading, setTutorLoading] = useState(false);
   const [tutorData, setTutorData] = useState<any>(null);
+  const [tutorMode, setTutorMode] = useState<"debug" | "learn" | "hint" | "explain" | "exam">("debug");
+  const [chatResponse, setChatResponse] = useState<any>(null);
+  const [hintTier, setHintTier] = useState(1);
 
   // Execution outputs
   const [isRunning, setIsRunning] = useState(false);
@@ -168,6 +171,41 @@ export default function AssessmentEditorPage() {
         suggested_action: "Review official course documentation for this topic.",
         course_references: [],
       });
+    } finally {
+      setTutorLoading(false);
+    }
+  };
+
+  const handleSwitchMode = async (mode: "debug" | "learn" | "hint" | "explain" | "exam", tier: number = 1) => {
+    setTutorMode(mode);
+    setHintTier(tier);
+    if (mode === "debug" && tutorData) {
+      setChatResponse(null);
+      return;
+    }
+    setTutorLoading(true);
+    try {
+      const userId = localStorage.getItem("brackyou_user") || "student_a";
+      const defaultQueries: Record<string, string> = {
+        learn: "Explain this concept and show verified code example",
+        debug: "Why did my test fail or throw an exception?",
+        hint: "Give me a progressive socratic hint for this question",
+        explain: "Explain my submitted code logic step-by-step",
+        exam: "Test my knowledge with exam prep takeaways and flash questions"
+      };
+      const res = await tutorChat({
+        student_id: userId,
+        mode,
+        query: defaultQueries[mode] || "Explain programming topic",
+        code,
+        context: {
+          stderr: runResult?.stderr || "",
+          tier
+        }
+      });
+      setChatResponse(res);
+    } catch (err) {
+      console.error(err);
     } finally {
       setTutorLoading(false);
     }
@@ -594,15 +632,160 @@ export default function AssessmentEditorPage() {
               </button>
             </div>
 
+            {/* 5-Mode RAG Tutor Selector */}
+            <div className="flex flex-wrap gap-1.5 p-1 bg-cream rounded-xl border border-borderLight">
+              {[
+                { id: "debug", label: "🐛 Debug Mode" },
+                { id: "learn", label: "🎓 Learn Mode" },
+                { id: "hint", label: "💡 Socratic Hint" },
+                { id: "explain", label: "🔍 Explain Code" },
+                { id: "exam", label: "📝 Exam Prep" },
+              ].map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => handleSwitchMode(m.id as any)}
+                  className={`flex-1 py-1 px-2 rounded-lg text-xs font-heading font-extrabold transition-all cursor-pointer text-center ${
+                    tutorMode === m.id
+                      ? "bg-accentOrange text-white shadow-[0_2px_0_#4A2C1A]"
+                      : "bg-white/60 text-textSecondary hover:bg-white"
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
             {tutorLoading ? (
               <div className="py-12 flex flex-col items-center justify-center space-y-3">
                 <RefreshCw className="w-8 h-8 text-accentOrange animate-spin" />
                 <p className="text-sm font-heading font-bold text-textPrimary">
-                  Retrieving course documents & analyzing execution trace...
+                  Synthesizing with official course knowledge ({tutorMode.toUpperCase()} mode)...
                 </p>
                 <p className="text-xs text-textMuted">
                   Applying hybrid search across approved lecture notes & student mastery DNA
                 </p>
+              </div>
+            ) : chatResponse ? (
+              /* Custom Mode Output */
+              <div className="space-y-4">
+                <div className="p-3 bg-white/80 rounded-xl border border-borderLight flex items-center justify-between">
+                  <span className="text-xs font-bold text-textPrimary">{chatResponse.title || "Tutor Response"}</span>
+                  <span className="text-[10px] font-mono font-bold text-accentTeal bg-accentTeal/10 px-2 py-0.5 rounded-pill">
+                    {chatResponse.source_citation || "COGNICODE Knowledge"}
+                  </span>
+                </div>
+
+                {tutorMode === "learn" && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-textPrimary font-medium leading-relaxed whitespace-pre-line p-3 bg-white/70 rounded-xl border border-borderLight">
+                      {chatResponse.explanation}
+                    </p>
+                    {chatResponse.code_example && (
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-accentOrange uppercase block">Instructor Code Example:</span>
+                        <pre className="p-3 bg-[#4A2C1A] text-cream font-mono text-[11px] rounded-xl overflow-x-auto">
+                          {chatResponse.code_example}
+                        </pre>
+                      </div>
+                    )}
+                    {chatResponse.practice_question && (
+                      <div className="p-3 bg-accentYellow/25 border border-accentBrown rounded-xl text-xs space-y-1">
+                        <span className="text-[10px] font-bold text-accentOrange uppercase block">Challenge Practice:</span>
+                        <p className="font-semibold text-textPrimary">{chatResponse.practice_question}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {tutorMode === "hint" && (
+                  <div className="space-y-3">
+                    <div className="flex gap-1.5 p-1 bg-cream rounded-xl border border-borderLight">
+                      {[1, 2, 3, 4].map((tier) => (
+                        <button
+                          key={tier}
+                          onClick={() => handleSwitchMode("hint", tier)}
+                          className={`flex-1 py-1 rounded text-[11px] font-bold cursor-pointer transition-all ${
+                            hintTier === tier
+                              ? "bg-accentTeal text-white shadow-sm"
+                              : "bg-white/50 text-textSecondary hover:bg-white"
+                          }`}
+                        >
+                          Tier {tier} {tier === 1 ? "(Concept)" : tier === 2 ? "(Boundary)" : tier === 3 ? "(Action)" : "(Solution)"}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="p-4 bg-accentYellow/25 border-[2px] border-accentBrown rounded-xl space-y-1.5">
+                      <span className="text-[10px] font-bold text-accentOrange uppercase block">
+                        Tier {chatResponse.tier} Socratic Nudge
+                      </span>
+                      <p className="text-xs font-semibold text-textPrimary leading-relaxed whitespace-pre-line">
+                        {chatResponse.hint_text}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {tutorMode === "explain" && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-white/80 rounded-xl border border-borderLight space-y-2">
+                      <span className="text-[10px] font-bold text-accentTeal uppercase block">Step-By-Step Execution Flow:</span>
+                      <ul className="list-disc list-inside text-xs text-textPrimary space-y-1 font-medium">
+                        {chatResponse.step_by_step?.map((st: string, idx: number) => (
+                          <li key={idx}>{st}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    {chatResponse.viva_understanding_question && (
+                      <div className="p-3.5 bg-accentOrange/10 border-[1.5px] border-accentOrange rounded-xl space-y-1">
+                        <span className="text-[10px] font-bold text-accentOrange uppercase block">AI Code Viva Question:</span>
+                        <p className="text-xs font-bold text-textPrimary italic">
+                          &ldquo;{chatResponse.viva_understanding_question}&rdquo;
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {tutorMode === "exam" && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-white/80 rounded-xl border border-borderLight space-y-1.5">
+                      <span className="text-[10px] font-bold text-accentTeal uppercase block">Key Exam Takeaways:</span>
+                      <ul className="list-disc list-inside text-xs text-textPrimary space-y-0.5">
+                        {chatResponse.key_takeaways?.map((kt: string, idx: number) => (
+                          <li key={idx}>{kt}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    {chatResponse.quiz_questions?.map((q: any, i: number) => (
+                      <div key={i} className="p-3 bg-cream rounded-xl border border-borderLight space-y-1.5 text-xs">
+                        <p className="font-bold text-textPrimary">Q{i + 1}: {q.question}</p>
+                        <div className="space-y-1">
+                          {q.options.map((opt: string, optIdx: number) => (
+                            <div
+                              key={optIdx}
+                              className={`p-1.5 rounded border text-[11px] ${
+                                opt === q.answer
+                                  ? "bg-emerald-50 border-emerald-400 text-emerald-900 font-bold"
+                                  : "bg-white/60 border-borderLight text-textSecondary"
+                              }`}
+                            >
+                              {opt} {opt === q.answer && "✅ (Answer)"}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="pt-2 flex justify-end gap-2">
+                  <button
+                    onClick={() => setTutorModalOpen(false)}
+                    className="px-4 py-2 bg-accentOrange text-white text-xs font-heading font-black rounded-pill border-[2px] border-accentBrown shadow-[2px_2px_0px_#4A2C1A] hover:bg-accentOrange/90 cursor-pointer"
+                  >
+                    Close Tutor
+                  </button>
+                </div>
               </div>
             ) : tutorData ? (
               <div className="space-y-4">

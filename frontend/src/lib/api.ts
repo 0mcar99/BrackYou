@@ -150,3 +150,44 @@ export const searchTutorKnowledge = (payload: {
 
 export const getTutorDocuments = () => fetchJson("/tutor/documents");
 
+// 5-Mode RAG Tutor Chat
+export const tutorChat = (payload: {
+  student_id: string;
+  mode: "learn" | "debug" | "hint" | "explain" | "exam";
+  query: string;
+  code?: string;
+  context?: any;
+}) =>
+  fetchJson("/tutor/chat", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+// Innovation 1: AI Learning Gap Radar
+export const getLearningGapRadar = (studentId: string) =>
+  fetchJson(`/tutor/learning-gap-radar/${studentId}`);
+
+// Innovation 3: Personal Error DNA
+export const getErrorDNA = (studentId: string) =>
+  fetchJson(`/tutor/error-dna/${studentId}`);
+
+// Innovation 4: Code Change Prediction Lab
+export const getPredictionScenarios = () =>
+  fetchJson("/tutor/prediction-lab/scenarios");
+
+export const evaluatePrediction = (payload: {
+  student_id: string;
+  scenario_id: string;
+  selected_option: string;
+  reasoning?: string;
+}) =>
+  fetchJson("/tutor/prediction-lab/evaluate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+// Innovation 5: Job-Role Skill Gap Analyzer
+export const getJobRoleGap = (studentId: string, targetRole: string = "backend_developer") =>
+  fetchJson(`/tutor/job-role-gap/${studentId}?target_role=${targetRole}`);
+
+

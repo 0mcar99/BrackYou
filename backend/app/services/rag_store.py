@@ -162,6 +162,95 @@ class RAGKnowledgeStore:
             source_doc="Module 1: Language Syntax & Type Primitives.pdf"
         )
 
+        # 5. Loops, Nested Iteration & Boundary Invariants
+        self.add_chunk(
+            chunk_id="chunk_loops_01",
+            course="Algorithms & Control Flow",
+            topic="Loops & Loop Boundaries",
+            concept_id="loops",
+            title="Loop Invariants, Boundary Conditions and Off-By-One Pitfalls",
+            content=(
+                "Loops must define clear termination invariants. Off-by-one errors frequently arise when "
+                "confusing inclusive comparisons (<=) with exclusive comparisons (<). In nested loops, each inner loop "
+                "must properly reset its iterator and avoid mutating outer loop index variables. "
+                "Always test boundary conditions: empty collections, single-item collections, and exact termination values."
+            ),
+            code_examples=[
+                (
+                    "// Java Loop with Boundary Guard\n"
+                    "for (int i = 0; i < array.length; i++) {\n"
+                    "    for (int j = 0; j < matrix[i].length; j++) {\n"
+                    "        process(matrix[i][j]);\n"
+                    "    }\n"
+                    "}"
+                )
+            ],
+            common_mistakes=[
+                "Using <= length instead of < length (causing index out of bounds)",
+                "Forgetting to increment inner loop counter, causing infinite loop",
+                "Mutating list length while iterating over it"
+            ],
+            source_doc="Module 2: Iteration Invariants & Complexity Analysis.pdf"
+        )
+
+        # 6. Arrays, Indexing & Slicing
+        self.add_chunk(
+            chunk_id="chunk_arrays_01",
+            course="Data Structures & Algorithms",
+            topic="Arrays & Linear Sequences",
+            concept_id="arrays",
+            title="Array Indexing, Bounds Checking and Memory Layout",
+            content=(
+                "Arrays allocate contiguous memory blocks indexed from 0 to N-1. Accessing index N or negative values "
+                "without bounds checks triggers ArrayIndexOutOfBoundsException or IndexError. "
+                "Before indexing an array, always assert 0 <= index < len(arr)."
+            ),
+            code_examples=[
+                (
+                    "def get_element_safe(arr, idx):\n"
+                    "    if idx < 0 or idx >= len(arr):\n"
+                    "        raise IndexError(f'Index {idx} out of range for array size {len(arr)}')\n"
+                    "    return arr[idx]"
+                )
+            ],
+            common_mistakes=[
+                "Accessing arr[len(arr)] instead of arr[len(arr) - 1]",
+                "Modifying array length during two-pointer scans",
+                "Assuming unsorted array is sorted without calling sort()"
+            ],
+            source_doc="Module 5: Sequential Data Structures & Indexing.pdf"
+        )
+
+        # 7. Recursion & Base Case Termination
+        self.add_chunk(
+            chunk_id="chunk_recursion_01",
+            course="Data Structures & Algorithms",
+            topic="Recursion & Divide and Conquer",
+            concept_id="recursion",
+            title="Recursive Decomposition and Base Case Invariants",
+            content=(
+                "Every recursive function requires at least one terminating base case that does not invoke "
+                "itself. Without a base case, recursion depth exceeds the call stack limit (RecursionError / StackOverflowError). "
+                "Each recursive step must strictly reduce the problem size toward the base condition."
+            ),
+            code_examples=[
+                (
+                    "def factorial(n):\n"
+                    "    if n < 0:\n"
+                    "        raise ValueError('Negative factorial undefined')\n"
+                    "    if n == 0 or n == 1:\n"
+                    "        return 1  # Base Case\n"
+                    "    return n * factorial(n - 1)  # Recursive Step"
+                )
+            ],
+            common_mistakes=[
+                "Omitting base case check (infinite recursion)",
+                "Calling recursion with n instead of n - 1",
+                "Not validating negative input bounds before recursion"
+            ],
+            source_doc="Module 7: Recursion, Trees & Stack Frames.pdf"
+        )
+
     def add_chunk(self, **kwargs):
         chunk = CourseKnowledgeChunk(**kwargs)
         self.chunks.append(chunk)
