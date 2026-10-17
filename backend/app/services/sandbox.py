@@ -287,7 +287,7 @@ class HardenedSandbox:
                     "except (ValueError, TypeError, AssertionError):\n"
                     "    print('User_101')\n"
                     "except Exception as _e:\n"
-                    "    print('User_101')\n"
+                    "    print(f'RuntimeError: {_e}')\n"
                 )
             else:
                 harness = (
