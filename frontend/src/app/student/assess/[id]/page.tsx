@@ -84,11 +84,14 @@ export default function AssessmentEditorPage() {
     const event = {
       offsetMs: elapsedSeconds * 1000,
       type,
-      payload
+      payload: {
+        ...payload,
+        contentSnapshot: code
+      }
     };
     eventBufferRef.current.push(event);
 
-    if (eventBufferRef.current.length >= 10 || type === "paste") {
+    if (eventBufferRef.current.length >= 10 || type === "paste" || type === "run" || type === "submit") {
       uploadTelemetryEvents(sessionIdRef.current, eventBufferRef.current).catch(console.error);
       eventBufferRef.current = [];
     }
@@ -548,7 +551,7 @@ export default function AssessmentEditorPage() {
             </div>
 
             <div className="pt-2 border-t-[1.5px] border-borderLight">
-              <Link href="/student/results/session_demo_alex" className="text-xs font-heading font-extrabold text-accentTeal hover:underline block text-center">
+              <Link href={`/student/results/${sessionIdRef.current}`} className="text-xs font-heading font-extrabold text-accentTeal hover:underline block text-center">
                 View Full Timeline Replay →
               </Link>
             </div>

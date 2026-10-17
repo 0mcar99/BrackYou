@@ -82,22 +82,74 @@ def get_session_replay(session_id: str, db=Depends(get_db)):
     concept = db.query(Concept).filter(Concept.id == concept_id).first()
     concept_title = concept.title if concept else "Dependency Injection"
 
-    # 2. Fetch Latest Submission
+    # 2. Fetch Latest Submission & Code
     submission = db.query(Submission).filter(
         Submission.session_id == session_id
     ).order_by(Submission.created_at.desc()).first()
 
-    # 3. Fetch Telemetry Events & Signals
+    default_tested_code = """class UserRepository:
+    def get_user(self, user_id):
+        return f"User_{user_id}"
+
+class UserService:
+    def __init__(self, repo):
+        # Enforcing constructor dependency injection
+        if repo is None:
+            raise ValueError("UserRepository dependency cannot be null")
+        self._repo = repo
+
+    def fetch_user(self, user_id):
+        return self._repo.get_user(user_id)
+
+if __name__ == '__main__':
+    service = UserService(UserRepository())
+    print(service.fetch_user(101))"""
+
+    submitted_code = submission.code if (submission and submission.code) else default_tested_code
+
+    # 3. Fetch Telemetry Events & Signals with Replay Timelines
     events = db.query(SessionEvent).filter(SessionEvent.session_id == session_id).order_by(SessionEvent.timestamp_offset_ms).all()
-    ev_dicts = [
-        {
+    ev_dicts = []
+    current_snapshot = (question.starter_code if question else "") or submitted_code
+
+    for e in events:
+        p = e.payload if isinstance(e.payload, dict) else {}
+        if p.get("contentSnapshot"):
+            current_snapshot = p["contentSnapshot"]
+        elif p.get("text") and len(p.get("text", "")) > 50:
+            current_snapshot = p["text"]
+        elif e.event_type in ("submit", "run"):
+            current_snapshot = submitted_code
+
+        ev_dicts.append({
             "id": e.id,
+            "t": e.timestamp_offset_ms,
             "timestamp_offset_ms": e.timestamp_offset_ms,
+            "type": e.event_type,
             "event_type": e.event_type,
-            "payload": e.payload
-        }
-        for e in events
-    ]
+            "action": p.get("action", "insert" if e.event_type in ("key", "paste") else e.event_type),
+            "key": p.get("key"),
+            "charCount": p.get("char_count", len(p.get("text", "")) if p.get("text") else None),
+            "contentSnapshot": current_snapshot,
+            "payload": p
+        })
+
+    # Ensure timeline scrubber has an initial state at t: 0
+    if not ev_dicts or ev_dicts[0]["t"] > 0:
+        init_code = (question.starter_code if question else "") or submitted_code
+        ev_dicts.insert(0, {
+            "id": "ev_init_0",
+            "t": 0,
+            "timestamp_offset_ms": 0,
+            "type": "window",
+            "event_type": "window",
+            "action": "focus",
+            "key": None,
+            "charCount": len(init_code),
+            "contentSnapshot": init_code,
+            "payload": {"note": "Session initialized", "contentSnapshot": init_code}
+        })
+
     analysis = analyzer.analyze_events(ev_dicts)
     db_signals = db.query(IntegritySignal).filter(IntegritySignal.session_id == session_id).all()
 
@@ -167,24 +219,6 @@ def get_session_replay(session_id: str, db=Depends(get_db)):
     }
 
     # 6. Format Submission Details & Terminal Log
-    submitted_code = submission.code if submission else """class UserRepository:
-    def get_user(self, user_id):
-        return f"User_{user_id}"
-
-class UserService:
-    def __init__(self, repo):
-        # Enforcing constructor dependency injection
-        if repo is None:
-            raise ValueError("UserRepository dependency cannot be null")
-        self._repo = repo
-
-    def fetch_user(self, user_id):
-        return self._repo.get_user(user_id)
-
-if __name__ == '__main__':
-    service = UserService(UserRepository())
-    print(service.fetch_user(101))"""
-
     test_details = submission.test_details if (submission and submission.test_details) else [
         {
             "name": "Basic Constructor Dependency Injection",

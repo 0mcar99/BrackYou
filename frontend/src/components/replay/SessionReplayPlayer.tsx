@@ -24,8 +24,14 @@ export const SessionReplayPlayer: React.FC<Props> = ({ playbackData, className =
         lastEvent: latest,
       };
     }
+    if (playbackData.events && playbackData.events.length > 0) {
+      return {
+        currentCode: playbackData.events[0].contentSnapshot,
+        lastEvent: playbackData.events[0],
+      };
+    }
     return {
-      currentCode: '// Session start: initial state\n// Waiting for keystrokes...',
+      currentCode: '// Session initialized: loading telemetry replay stream...',
       lastEvent: null,
     };
   }, [currentMs, playbackData.events]);

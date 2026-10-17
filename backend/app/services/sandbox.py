@@ -401,25 +401,34 @@ class HardenedSandbox:
                 ]
             }
 
-        # Syntax check check first to fail fast with line number
         syntax_err = self.validate_syntax(code, language)
         if syntax_err:
+            err_details = [
+                {
+                    "name": tc.get("name", f"Test {idx+1}"),
+                    "passed": False,
+                    "is_hidden": tc.get("is_hidden", False),
+                    "input": tc.get("input_data", ""),
+                    "input_data": tc.get("input_data", ""),
+                    "expected": tc.get("expected_output", ""),
+                    "expected_output": tc.get("expected_output", ""),
+                    "actual": "",
+                    "actual_output": "",
+                    "error": f"SyntaxError on line {syntax_err['line']}: {syntax_err['message']}"
+                }
+                for idx, tc in enumerate(test_cases)
+            ]
             return {
                 "passed_count": 0,
                 "total_count": len(test_cases),
                 "execution_time_ms": 1,
+                "runtime_ms": 1,
                 "status": "syntax_error",
                 "stdout": "",
                 "stderr": syntax_err["formatted"],
-                "test_details": [
-                    {
-                        "name": tc.get("name", f"Test {idx+1}"),
-                        "passed": False,
-                        "is_hidden": tc.get("is_hidden", False),
-                        "error": f"SyntaxError on line {syntax_err['line']}: {syntax_err['message']}"
-                    }
-                    for idx, tc in enumerate(test_cases)
-                ]
+                "syntax_error": syntax_err,
+                "test_details": err_details,
+                "test_results": err_details
             }
 
         for idx, tc in enumerate(test_cases):
@@ -470,24 +479,31 @@ class HardenedSandbox:
                 error=res["stderr"] if not passed and res["stderr"] else None
             ))
 
+        formatted_results = [
+            {
+                "name": r.name,
+                "passed": r.passed,
+                "is_hidden": r.is_hidden,
+                "execution_time_ms": r.execution_time_ms,
+                "input_data": r.input_data,
+                "input": r.input_data,
+                "expected_output": r.expected_output,
+                "expected": r.expected_output,
+                "actual_output": r.actual_output,
+                "actual": r.actual_output,
+                "error": r.error
+            }
+            for r in results
+        ]
+
         return {
             "passed_count": passed_count,
             "total_count": len(test_cases),
             "execution_time_ms": total_time_ms,
+            "runtime_ms": total_time_ms,
             "status": overall_status if passed_count < len(test_cases) else "passed",
             "stdout": first_stdout,
             "stderr": first_stderr,
-            "test_details": [
-                {
-                    "name": r.name,
-                    "passed": r.passed,
-                    "is_hidden": r.is_hidden,
-                    "execution_time_ms": r.execution_time_ms,
-                    "input_data": r.input_data,
-                    "expected_output": r.expected_output,
-                    "actual_output": r.actual_output,
-                    "error": r.error
-                }
-                for r in results
-            ]
+            "test_details": formatted_results,
+            "test_results": formatted_results
         }

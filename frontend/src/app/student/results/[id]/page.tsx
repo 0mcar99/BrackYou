@@ -187,7 +187,14 @@ export default function ResultsDashboardPage() {
       charDelta: s.char_count || 340,
       description: s.evidence_description || "Flagged event"
     })),
-    events: replayData?.events && replayData.events.length > 0 ? replayData.events : [
+    events: replayData?.events && replayData.events.length > 0 ? replayData.events.map((e: any) => ({
+      t: e.t ?? e.timestamp_offset_ms ?? 0,
+      type: e.type ?? e.event_type ?? 'key',
+      action: e.action ?? (e.payload?.action || 'insert'),
+      key: e.key ?? e.payload?.key,
+      charCount: e.charCount ?? e.payload?.char_count,
+      contentSnapshot: e.contentSnapshot ?? e.payload?.contentSnapshot ?? submittedCode
+    })) : [
       { t: 0, type: 'window', action: 'focus', contentSnapshot: '# Workspace initialized\n' },
       { t: 180000, type: 'key', action: 'insert', contentSnapshot: 'class UserRepository:\n    def get_user(self, user_id):\n        return f"User_{user_id}"\n' },
       { t: 374000, type: 'paste', action: 'insert', contentSnapshot: submittedCode }
@@ -395,9 +402,14 @@ export default function ResultsDashboardPage() {
 
       {/* SCREENSHOT 2: FORMAT 4 — ACTUAL CODE & TERMINAL OUTPUT */}
       <div className="tiebreak-card p-6 bg-card space-y-4">
-        <span className="text-xs font-heading font-extrabold uppercase tracking-widest text-textSecondary block">
-          4. Actual Code & Terminal Output
-        </span>
+        <div className="flex justify-between items-center">
+          <span className="text-xs font-heading font-extrabold uppercase tracking-widest text-textSecondary block">
+            4. Actual Code & Terminal Output
+          </span>
+          <span className="text-[11px] font-mono font-bold text-accentTeal bg-accentTeal/10 px-2.5 py-0.5 rounded-pill border border-accentTeal/30">
+            Tested Code Snapshot ({submittedCode.split('\n').length} lines)
+          </span>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Left: Exact Submitted Code */}
@@ -413,12 +425,26 @@ export default function ResultsDashboardPage() {
               </div>
               <div className="text-emerald-300 font-semibold">Running Test Suite...</div>
               {testDetails.map((tc: any, idx: number) => (
-                <div key={idx} className="text-cream/90 text-[11px]">
-                  Test {idx + 1} ({tc.name}):{" "}
-                  <span className={tc.passed ? "text-emerald-300 font-bold" : "text-rose-300 font-bold"}>
-                    {tc.passed ? "PASSED" : "FAILED"}
-                  </span>{" "}
-                  ({tc.execution_time_ms || 42}ms)
+                <div key={idx} className="text-cream/90 text-[11px] space-y-0.5 border-b border-cream/10 pb-1.5 last:border-0">
+                  <div className="flex justify-between items-center">
+                    <span>Test {idx + 1} ({tc.name}):</span>
+                    <span className={tc.passed ? "text-emerald-300 font-bold" : "text-rose-300 font-bold"}>
+                      {tc.passed ? "PASSED ✅" : "FAILED ❌"}
+                    </span>
+                  </div>
+                  {tc.expected_output && !tc.is_hidden && (
+                    <div className="text-[10px] text-cream/70 truncate">
+                      Expected: <span className="font-mono text-emerald-300">{tc.expected_output}</span>
+                      {tc.actual_output && (
+                        <span> | Got: <span className="font-mono text-cream">{tc.actual_output}</span></span>
+                      )}
+                    </div>
+                  )}
+                  {tc.error && (
+                    <div className="text-[10px] text-rose-300 font-mono truncate">
+                      Error: {tc.error}
+                    </div>
+                  )}
                 </div>
               ))}
               <div className="text-accentYellow pt-1 font-bold">

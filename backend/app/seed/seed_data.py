@@ -32,6 +32,41 @@ def populate_seed_data():
                     u.phone_number = phone
                 if not u.password_hash:
                     u.password_hash = hash_password("password123")
+        
+        # Ensure sub_demo_alex has the actual tested refactored code (not starter code)
+        existing_sub = db.query(Submission).filter(Submission.id == "sub_demo_alex").first()
+        if existing_sub and ("TODO: Refactor" in existing_sub.code or "repo=None" in existing_sub.code):
+            existing_sub.code = """class UserRepository:
+    def get_user(self, user_id):
+        return f"User_{user_id}"
+
+class UserService:
+    def __init__(self, repo):
+        # Enforcing constructor dependency injection
+        if repo is None:
+            raise ValueError("UserRepository dependency cannot be null")
+        self._repo = repo
+
+    def fetch_user(self, user_id):
+        return self._repo.get_user(user_id)
+
+if __name__ == '__main__':
+    service = UserService(UserRepository())
+    print(service.fetch_user(101))"""
+
+        # Ensure demo events have contentSnapshot populated
+        events = db.query(SessionEvent).filter(SessionEvent.session_id == "session_demo_alex").all()
+        q1_obj = db.query(Question).filter(Question.id == "q_di_1").first()
+        st_code = q1_obj.starter_code if q1_obj else ""
+        for ev in events:
+            if isinstance(ev.payload, dict) and "contentSnapshot" not in ev.payload:
+                new_payload = dict(ev.payload)
+                if ev.event_type in ("paste", "run", "submit") and ev.timestamp_offset_ms >= 374000:
+                    new_payload["contentSnapshot"] = existing_sub.code if existing_sub else st_code
+                else:
+                    new_payload["contentSnapshot"] = st_code
+                ev.payload = new_payload
+
         db.commit()
         db.close()
         return
@@ -270,10 +305,28 @@ if __name__ == '__main__':
     db.add(demo_session)
     db.commit()
 
+    tested_alex_code = """class UserRepository:
+    def get_user(self, user_id):
+        return f"User_{user_id}"
+
+class UserService:
+    def __init__(self, repo):
+        # Enforcing constructor dependency injection
+        if repo is None:
+            raise ValueError("UserRepository dependency cannot be null")
+        self._repo = repo
+
+    def fetch_user(self, user_id):
+        return self._repo.get_user(user_id)
+
+if __name__ == '__main__':
+    service = UserService(UserRepository())
+    print(service.fetch_user(101))"""
+
     demo_submission = Submission(
         id="sub_demo_alex",
         session_id="session_demo_alex",
-        code=q1.starter_code,
+        code=tested_alex_code,
         passed_tests=2,
         total_tests=2,
         execution_time_ms=84,
@@ -289,16 +342,16 @@ if __name__ == '__main__':
 
     # Telemetry events reproducing a coding timeline with a paste anomaly at 06:14
     demo_events = [
-        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=10000, event_type="focus", payload={"note": "Session started"}),
-        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=45000, event_type="key", payload={"key": "c", "line": 5}),
-        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=62000, event_type="run", payload={"result": "failed"}),
-        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=140000, event_type="delete", payload={"count": 14}),
-        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=210000, event_type="blur", payload={"reason": "tab_switch"}),
-        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=257000, event_type="focus", payload={"duration_ms": 47000}),
+        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=10000, event_type="focus", payload={"note": "Session started", "contentSnapshot": q1.starter_code}),
+        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=45000, event_type="key", payload={"key": "c", "line": 5, "contentSnapshot": q1.starter_code}),
+        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=62000, event_type="run", payload={"result": "failed", "contentSnapshot": q1.starter_code}),
+        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=140000, event_type="delete", payload={"count": 14, "contentSnapshot": q1.starter_code}),
+        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=210000, event_type="blur", payload={"reason": "tab_switch", "contentSnapshot": q1.starter_code}),
+        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=257000, event_type="focus", payload={"duration_ms": 47000, "contentSnapshot": q1.starter_code}),
         # Large Paste Event at 06:14 (374000 ms)
-        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=374000, event_type="paste", payload={"char_count": 340, "line": 8, "text": "class UserService:\n    def __init__(self, repo):\n        self.repo = repo"}),
-        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=410000, event_type="run", payload={"result": "passed"}),
-        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=450000, event_type="submit", payload={"tests_passed": 2})
+        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=374000, event_type="paste", payload={"char_count": 340, "line": 8, "text": tested_alex_code, "contentSnapshot": tested_alex_code}),
+        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=410000, event_type="run", payload={"result": "passed", "contentSnapshot": tested_alex_code}),
+        SessionEvent(session_id="session_demo_alex", timestamp_offset_ms=450000, event_type="submit", payload={"tests_passed": 2, "contentSnapshot": tested_alex_code})
     ]
     db.add_all(demo_events)
 

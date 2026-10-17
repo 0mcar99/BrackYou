@@ -109,6 +109,7 @@ def run_code(req: RunRequest, db=Depends(get_db)):
         tc_dicts, 
         custom_input=req.custom_input
     )
+    result["code"] = req.code
     return result
 
 class HintRequest(BaseModel):
