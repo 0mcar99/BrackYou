@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Play, Send, Lightbulb, Clock, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw, Terminal } from "lucide-react";
+import { Play, Send, Lightbulb, Clock, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw, Terminal, BookOpen, Sparkles, X } from "lucide-react";
 import { PillButton } from "@/components/ui/PillButton";
 import { SegmentedBar } from "@/components/ui/SegmentedBar";
-import { getQuestionDetail, runCode, submitCode, uploadTelemetryEvents, getSocraticHint } from "@/lib/api";
+import { getQuestionDetail, runCode, submitCode, uploadTelemetryEvents, getSocraticHint, explainFailedTest } from "@/lib/api";
 
 export default function AssessmentEditorPage() {
   const params = useParams();
@@ -30,6 +30,11 @@ export default function AssessmentEditorPage() {
   const [showHint, setShowHint] = useState(false);
   const [hintLoading, setHintLoading] = useState(false);
   const [hintData, setHintData] = useState<any>(null);
+
+  // RAG AI Tutor state
+  const [tutorModalOpen, setTutorModalOpen] = useState(false);
+  const [tutorLoading, setTutorLoading] = useState(false);
+  const [tutorData, setTutorData] = useState<any>(null);
 
   // Execution outputs
   const [isRunning, setIsRunning] = useState(false);
@@ -137,6 +142,34 @@ export default function AssessmentEditorPage() {
       });
     } finally {
       setHintLoading(false);
+    }
+  };
+
+  const handleExplainWithTutor = async () => {
+    setTutorModalOpen(true);
+    setTutorLoading(true);
+    try {
+      const userId = localStorage.getItem("brackyou_user") || "student_a";
+      const res = await explainFailedTest({
+        student_id: userId,
+        question_id: questionId,
+        code,
+        execution_status: runResult?.status || "failure",
+        stderr: runResult?.stderr || "",
+        test_details: runResult?.test_results || [],
+        language,
+      });
+      setTutorData(res);
+    } catch (err: any) {
+      setTutorData({
+        status: "partial",
+        explanation: "Unable to retrieve dynamic AI tutor response right now. Review the compiler stderr and test assertions.",
+        socratic_nudge: "Where does your return value differ from the test suite's expected output?",
+        suggested_action: "Review official course documentation for this topic.",
+        course_references: [],
+      });
+    } finally {
+      setTutorLoading(false);
     }
   };
 
@@ -405,6 +438,23 @@ export default function AssessmentEditorPage() {
                   Passed {runResult.passed_count}/{runResult.total_count} test cases.
                 </div>
               )}
+
+              {/* RAG AI Tutor "Explain My Failed Test" Action */}
+              {(runResult.passed_count < runResult.total_count || runResult.stderr || runResult.status !== "success") && (
+                <div className="pt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-cream/20 mt-2">
+                  <div className="flex items-center gap-1.5 text-[11px] text-cream/90 font-medium">
+                    <AlertTriangle className="w-3.5 h-3.5 text-accentOrange shrink-0" />
+                    <span>Failed assertion or compiler error?</span>
+                  </div>
+                  <button
+                    onClick={handleExplainWithTutor}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-accentOrange text-white text-xs font-heading font-extrabold rounded-pill border-[1.5px] border-accentBrown shadow-[0_2px_0_#4A2C1A] hover:bg-accentOrange/90 cursor-pointer transition-all"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-white" />
+                    Explain with AI Tutor
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -503,9 +553,161 @@ export default function AssessmentEditorPage() {
                 Stuck or encountering an error? Click &lsquo;Reveal Hint&rsquo; for an AI-guided Socratic insight tailored to your code.
               </p>
             )}
+
+            <div className="pt-2 border-t-[1.5px] border-borderLight flex items-center justify-between">
+              <span className="text-[10px] text-textMuted font-bold uppercase">RAG Knowledge Base</span>
+              <button
+                onClick={handleExplainWithTutor}
+                className="text-[11px] font-heading font-extrabold text-accentTeal hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                Explain with Course Notes
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* COGNICODE RAG-Powered AI Tutor Modal */}
+      {tutorModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="tiebreak-card max-w-2xl w-full bg-[#FDF6E8] border-[3px] border-[#4A2C1A] shadow-[8px_8px_0px_#4A2C1A] p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b-[2px] border-borderLight pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-pill bg-accentOrange/10 border border-accentOrange">
+                  <Sparkles className="w-5 h-5 text-accentOrange" />
+                </span>
+                <div>
+                  <h3 className="text-base font-heading font-black text-textPrimary tracking-tight">
+                    RAG-Powered AI Coding Tutor
+                  </h3>
+                  <p className="text-[11px] font-semibold text-textSecondary">
+                    Evidence-grounded explanation synthesized with official course materials
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setTutorModalOpen(false)}
+                className="p-1.5 rounded-full hover:bg-black/5 text-textMuted cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {tutorLoading ? (
+              <div className="py-12 flex flex-col items-center justify-center space-y-3">
+                <RefreshCw className="w-8 h-8 text-accentOrange animate-spin" />
+                <p className="text-sm font-heading font-bold text-textPrimary">
+                  Retrieving course documents & analyzing execution trace...
+                </p>
+                <p className="text-xs text-textMuted">
+                  Applying hybrid search across approved lecture notes & student mastery DNA
+                </p>
+              </div>
+            ) : tutorData ? (
+              <div className="space-y-4">
+                {/* Student Context & Mastery Badge */}
+                <div className="p-3 bg-accentOrange/10 border-[1.5px] border-accentOrange rounded-xl flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-accentOrange uppercase tracking-wider block">
+                      Target Concept & Knowledge Tracing
+                    </span>
+                    <span className="text-xs font-bold text-textPrimary">
+                      {tutorData.concept_title || tutorData.concept_id || "Programming Concept"}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] font-bold text-textMuted uppercase block">Mastery P(L)</span>
+                    <span className="text-sm font-heading font-black text-accentOrange">
+                      {tutorData.student_mastery_pct !== undefined ? `${tutorData.student_mastery_pct}%` : "35%"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Execution Evidence */}
+                {tutorData.execution_evidence && (
+                  <div className="p-3.5 bg-[#4A2C1A]/10 border-[1.5px] border-accentBrown rounded-xl space-y-1.5">
+                    <div className="flex justify-between items-center text-[10px] font-bold uppercase">
+                      <span className="text-textSecondary">Execution Trace Analysis</span>
+                      <span className={tutorData.execution_evidence.has_error ? "text-accentRed" : "text-accentOrange"}>
+                        Status: {tutorData.execution_evidence.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-textPrimary font-medium">
+                      {tutorData.execution_evidence.summary}
+                    </p>
+                    {tutorData.execution_evidence.error_snippet && (
+                      <pre className="p-2 bg-black/85 text-rose-300 font-mono text-[10px] rounded overflow-x-auto whitespace-pre-wrap">
+                        {tutorData.execution_evidence.error_snippet}
+                      </pre>
+                    )}
+                  </div>
+                )}
+
+                {/* Socratic Nudge & Guiding Question */}
+                {tutorData.socratic_guidance && (
+                  <div className="p-3.5 bg-accentYellow/25 border-[2px] border-accentBrown rounded-xl space-y-2">
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-textPrimary uppercase tracking-wider">
+                      <Lightbulb className="w-4 h-4 text-accentOrange fill-current" />
+                      Socratic Nudge (No Spoilers)
+                    </div>
+                    {tutorData.socratic_guidance.guiding_question && (
+                      <p className="text-xs italic font-bold text-textPrimary">
+                        &ldquo;{tutorData.socratic_guidance.guiding_question}&rdquo;
+                      </p>
+                    )}
+                    <p className="text-xs font-semibold text-textSecondary leading-relaxed">
+                      {tutorData.socratic_guidance.progressive_hint}
+                    </p>
+                  </div>
+                )}
+
+                {/* Grounded Course References (RAG Chunk) */}
+                {tutorData.retrieved_knowledge && (
+                  <div className="space-y-2 pt-2 border-t-[1.5px] border-borderLight">
+                    <span className="text-xs font-heading font-extrabold uppercase text-textPrimary flex items-center gap-1.5">
+                      <BookOpen className="w-4 h-4 text-accentTeal" />
+                      Cited Official Course Material
+                    </span>
+                    <div className="p-3 bg-white/80 rounded-xl border border-borderLight space-y-2 text-xs">
+                      <div className="flex flex-wrap justify-between items-center gap-2">
+                        <span className="font-bold text-textPrimary text-xs">{tutorData.retrieved_knowledge.title}</span>
+                        <span className="text-[10px] font-mono text-accentTeal font-bold bg-accentTeal/10 px-2 py-0.5 rounded-pill">
+                          {tutorData.retrieved_knowledge.source_document}
+                        </span>
+                      </div>
+                      <p className="text-textSecondary leading-relaxed text-[11px] bg-cream/70 p-2.5 rounded-lg border border-borderLight">
+                        {tutorData.retrieved_knowledge.trusted_excerpt}
+                      </p>
+                      {tutorData.retrieved_knowledge.common_pitfalls && (
+                        <div className="space-y-1 pt-1">
+                          <span className="text-[10px] font-bold text-accentOrange uppercase block">Common Pitfalls to Avoid:</span>
+                          <ul className="list-disc list-inside text-[11px] text-textSecondary space-y-0.5">
+                            {tutorData.retrieved_knowledge.common_pitfalls.map((pf: string, i: number) => (
+                              <li key={i}>{pf}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Action CTA */}
+                <div className="pt-2 flex justify-end gap-2">
+                  <button
+                    onClick={() => setTutorModalOpen(false)}
+                    className="px-4 py-2 bg-accentOrange text-white text-xs font-heading font-black rounded-pill border-[2px] border-accentBrown shadow-[2px_2px_0px_#4A2C1A] hover:bg-accentOrange/90 cursor-pointer"
+                  >
+                    I understand — Let me fix my code
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

@@ -122,3 +122,31 @@ export const syncSheetDB = () =>
   fetchJson("/sheetdb/sync", {
     method: "POST",
   });
+
+// RAG AI Tutor
+export const explainFailedTest = (payload: {
+  student_id: string;
+  question_id: string;
+  code: string;
+  execution_status: string;
+  stderr?: string;
+  test_details?: any[];
+  language?: string;
+}) =>
+  fetchJson("/tutor/explain-test", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const searchTutorKnowledge = (payload: {
+  query: string;
+  concept_id?: string;
+  top_k?: number;
+}) =>
+  fetchJson("/tutor/search-knowledge", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const getTutorDocuments = () => fetchJson("/tutor/documents");
+

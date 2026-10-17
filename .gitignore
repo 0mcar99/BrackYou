@@ -13,6 +13,7 @@ frontend/out/
 frontend/build/
 .npm
 *.log
+*.tsbuildinfo
 
 # Environments & OS
 .env
